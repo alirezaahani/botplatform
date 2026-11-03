@@ -385,3 +385,19 @@ def test_redact_hides_a_password_that_is_not_in_the_host():
     assert redact(text, "s3cret", "demo.arcaptcha.co") == (
         "https://demo.arcaptcha.co/ failed for [password] and [password]."
     )
+
+
+def test_run_keeps_the_site_host_in_the_error_but_hides_the_password(monkeypatch):
+    monkeypatch.setenv("ARCAPTCHA_USERNAME", "demo")
+    monkeypatch.setenv("ARCAPTCHA_PASSWORD", "demo")
+
+    def explode(self):
+        raise RuntimeError("could not load https://demo.arcaptcha.co/ for demo")
+
+    monkeypatch.setattr(arcaptcha.Scenario, "run", explode)
+    result = ArcaptchaBot(url="https://demo.arcaptcha.co/").run(RecordingContext())
+
+    assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
+    assert "https://demo.arcaptcha.co/" in result.error
+    assert "[password].arcaptcha.co" not in result.error
+    assert "for [password]" in result.error
