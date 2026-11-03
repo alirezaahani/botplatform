@@ -206,7 +206,12 @@ class Scenario:
         self._do(lambda: driver.find_element(By.CSS_SELECTOR, CHECKBOX).click(), retry=False)
         self.ctx.event("checkbox_clicked")
 
-        self._wait_for(self._drain, self.timeouts.create_response, "create_response")
+        # A request that failed will never get a response, so there is nothing more to wait for.
+        self._wait_for(
+            lambda: self._drain() or "create" in self.watcher.failed,
+            self.timeouts.create_response,
+            "create_response",
+        )
         # A later `create` can follow, so keep listening briefly.
         deadline = time.monotonic() + self.timeouts.more_create_responses
         while time.monotonic() < deadline:
@@ -235,10 +240,15 @@ class Scenario:
         self._do(lambda: driver.find_element(By.XPATH, LOGIN_BUTTON).click(), retry=False)
 
         self._wait_for(
-            lambda: self._drain() and self.logins,
+            lambda: (self._drain() and self.logins) or "login" in self.watcher.failed,
             self.timeouts.login_response,
             "login_response",
         )
+        if not self.logins:
+            self.ctx.event("login_request_failed")
+            return BotResult(
+                Status.ERROR, "login_request_failed", "The login request failed before a response"
+            )
         login = self.logins[-1]
         body = self._json_body(login)
         self.ctx.event(
@@ -322,6 +332,10 @@ class Scenario:
 
     def _classify_create(self) -> BotResult | None:
         # A response we could not decode has no type, so only decoded ones decide the outcome.
+        if not self.creates and "create" in self.watcher.failed:
+            return BotResult(
+                Status.ERROR, "create_request_failed", "The create request failed before a response"
+            )
         types = [c["captcha_type"] for c in self.creates if c["captcha_type"] is not None]
         if "block" in types:
             return BotResult(Status.BLOCKED, "captcha_blocked")
