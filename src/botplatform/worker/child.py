@@ -1,0 +1,68 @@
+"""Runs one bot in its own process, so the worker can kill it, along with its browser."""
+
+import sys
+import traceback
+import uuid
+from typing import Any
+
+from sqlalchemy import update
+from sqlalchemy.orm import sessionmaker
+
+from botplatform.bots import BOTS
+from botplatform.contract import BotResult, Status
+from botplatform.db import Run, RunArtifact, RunEvent, session_factory
+from botplatform.worker.queue import finish
+
+
+class DatabaseRunContext:
+    """The `RunContext` given to bots. Each call commits, so it survives a kill or crash."""
+
+    def __init__(self, sessions: sessionmaker, run_id: uuid.UUID, mode: str) -> None:
+        self._sessions = sessions
+        self._run_id = run_id
+        self.run_id = str(run_id)
+        self.mode = mode
+
+    def record_challenge_id(self, value: str) -> None:
+        with self._sessions.begin() as session:
+            session.add(RunEvent(run_id=self._run_id, type="challenge_id", data={"value": value}))
+            session.execute(update(Run).where(Run.id == self._run_id).values(challenge_id=value))
+
+    def event(self, type: str, data: dict[str, Any] | None = None) -> None:
+        with self._sessions.begin() as session:
+            session.add(RunEvent(run_id=self._run_id, type=type, data=data))
+
+    def artifact(self, name: str, content_type: str, data: bytes) -> None:
+        with self._sessions.begin() as session:
+            session.add(
+                RunArtifact(run_id=self._run_id, name=name, content_type=content_type, data=data)
+            )
+
+
+def execute(sessions: sessionmaker, run_id: uuid.UUID) -> BotResult:
+    with sessions() as session:
+        run = session.get_one(Run, run_id)
+        bot_id, mode = run.bot_id, run.mode
+
+    bot_class = next((bot for bot in BOTS if bot.id == bot_id), None)
+    if bot_class is None:
+        return BotResult(Status.ERROR, "bot_unavailable", f"This worker has no bot '{bot_id}'")
+    if mode not in bot_class.modes:
+        return BotResult(Status.ERROR, "mode_unavailable", f"'{bot_id}' has no mode '{mode}'")
+
+    try:
+        return bot_class().run(DatabaseRunContext(sessions, run_id, mode))
+    except Exception:
+        return BotResult(Status.ERROR, "unhandled_exception", traceback.format_exc())
+
+
+def main() -> None:
+    run_id = uuid.UUID(sys.argv[1])
+    sessions = session_factory()
+    result = execute(sessions, run_id)
+    with sessions.begin() as session:
+        finish(session, run_id, result.status, result.reason, result.error)
+
+
+if __name__ == "__main__":
+    main()
