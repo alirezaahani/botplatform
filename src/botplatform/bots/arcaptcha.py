@@ -5,6 +5,7 @@ import os
 import time
 import traceback
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from selenium import webdriver
@@ -30,14 +31,23 @@ LOGIN_BUTTON = "//button[normalize-space()='Login']"
 CHALLENGE_TYPES = {"puzzle", "question", "2fa"}
 ACCEPTED_TYPES = {"accept", "cookie"}
 
-# Seconds allowed for each step. Together they stay well below the run time limit.
-LOAD_PAGE_SECONDS = 30
-FIND_CHECKBOX_SECONDS = 15
-CREATE_RESPONSE_SECONDS = 20
-MORE_CREATE_RESPONSES_SECONDS = 2
-LOGIN_RESPONSE_SECONDS = 15
-TOAST_SECONDS = 5
 POLL_SECONDS = 0.25
+
+
+@dataclass(frozen=True)
+class StepTimeouts:
+    """Seconds allowed for each step. The defaults stay well below the run time limit."""
+
+    load_page: float = 30
+    find_checkbox: float = 15
+    create_response: float = 20
+    more_create_responses: float = 2
+    login_response: float = 15
+    toast: float = 5
+
+
+DEFAULT_TIMEOUTS = StepTimeouts()
+
 
 # Reads the challenge ID three ways, separately, so each answer stays distinct. The widget list is
 # `window.arcaptcha.widgets`, keyed by widget ID (from widget.arcaptcha.ir/1/api.js).
@@ -82,6 +92,10 @@ class ArcaptchaBot(Bot):
     )
     modes: ClassVar[list[str]] = ["headless"]
 
+    def __init__(self, url: str = DEMO_URL, timeouts: StepTimeouts = DEFAULT_TIMEOUTS) -> None:
+        self.url = url
+        self.timeouts = timeouts
+
     def run(self, ctx: RunContext) -> BotResult:
         username = os.environ.get("ARCAPTCHA_USERNAME")
         password = os.environ.get("ARCAPTCHA_PASSWORD")
@@ -93,7 +107,7 @@ class ArcaptchaBot(Bot):
             )
         try:
             with chrome(headless=ctx.mode == "headless") as driver:
-                return Scenario(ctx, driver, username, password).run()
+                return Scenario(ctx, driver, username, password, self.url, self.timeouts).run()
         except Exception:  # noqa: BLE001 - every failure becomes an error result, minus the password
             # The password must never reach the run's error field, whatever the exception says.
             details = traceback.format_exc().replace(password, "[password]")
@@ -102,12 +116,20 @@ class ArcaptchaBot(Bot):
 
 class Scenario:
     def __init__(
-        self, ctx: RunContext, driver: webdriver.Chrome, username: str, password: str
+        self,
+        ctx: RunContext,
+        driver: webdriver.Chrome,
+        username: str,
+        password: str,
+        url: str = DEMO_URL,
+        timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
     ) -> None:
         self.ctx = ctx
         self.driver = driver
         self.username = username
         self.password = password
+        self.url = url
+        self.timeouts = timeouts
         self.watcher = ResponseWatcher(
             driver,
             {
@@ -154,15 +176,15 @@ class Scenario:
     def _open_and_tick(self) -> BotResult | None:
         """Tick the checkbox. Return the failure this causes, or None if the widget accepted us."""
         driver = self.driver
-        driver.set_page_load_timeout(LOAD_PAGE_SECONDS)
+        driver.set_page_load_timeout(self.timeouts.load_page)
         try:
-            self._do(lambda: driver.get(DEMO_URL))
+            self._do(lambda: driver.get(self.url))
         except TimeoutException:
             raise StepTimeout("load_page") from None
         self.ctx.event("page_loaded", {"iframes": len(driver.find_elements(By.TAG_NAME, "iframe"))})
         self._wait_for(
             lambda: driver.find_elements(By.CSS_SELECTOR, CHECKBOX),
-            FIND_CHECKBOX_SECONDS,
+            self.timeouts.find_checkbox,
             "find_checkbox",
         )
         self._screenshot("before-click")
@@ -170,9 +192,9 @@ class Scenario:
         self._do(lambda: driver.find_element(By.CSS_SELECTOR, CHECKBOX).click(), retry=False)
         self.ctx.event("checkbox_clicked")
 
-        self._wait_for(self._drain, CREATE_RESPONSE_SECONDS, "create_response")
+        self._wait_for(self._drain, self.timeouts.create_response, "create_response")
         # A later `create` can follow, so keep listening briefly.
-        deadline = time.monotonic() + MORE_CREATE_RESPONSES_SECONDS
+        deadline = time.monotonic() + self.timeouts.more_create_responses
         while time.monotonic() < deadline:
             self._drain()
             time.sleep(POLL_SECONDS)
@@ -199,7 +221,9 @@ class Scenario:
         self._do(lambda: driver.find_element(By.XPATH, LOGIN_BUTTON).click(), retry=False)
 
         self._wait_for(
-            lambda: self._drain() and self.logins, LOGIN_RESPONSE_SECONDS, "login_response"
+            lambda: self._drain() and self.logins,
+            self.timeouts.login_response,
+            "login_response",
         )
         login = self.logins[-1]
         body = self._json_body(login)
@@ -207,7 +231,7 @@ class Scenario:
             "login_response", {"http_status": login.status, "body": self._body_text(login)}
         )
 
-        toast = self._wait_for(self._toast, TOAST_SECONDS, "toast")
+        toast = self._wait_for(self._toast, self.timeouts.toast, "toast")
         self.ctx.event("toast", toast)
         message = body.get("msg") if isinstance(body, dict) else None
         confirmed = (
