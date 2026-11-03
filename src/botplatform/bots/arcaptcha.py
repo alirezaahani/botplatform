@@ -197,7 +197,7 @@ class Scenario:
         # A later `create` can follow, so keep listening briefly.
         deadline = time.monotonic() + self.timeouts.more_create_responses
         while time.monotonic() < deadline:
-            self._drain()
+            self._do(self._drain)
             time.sleep(POLL_SECONDS)
         self.ctx.event("widget_challenge_id_after_click", self._widget_challenge_id())
         self.ctx.event(
@@ -275,6 +275,9 @@ class Scenario:
 
     def _drain(self) -> bool:
         """Read new network responses. Each `create` is recorded the moment it is seen."""
+        # Reading the network log never notices a JS `alert()`, and an open alert freezes the
+        # page. Any other driver command raises when one is open, which `_do` then handles.
+        self.driver.title  # noqa: B018
         seen_create = False
         for response in self.watcher.poll():
             if response.name == "login":
