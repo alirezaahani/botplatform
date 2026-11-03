@@ -237,10 +237,12 @@ def test_create_api_origin_refuses_connections(fake, run_bot):
     fake.stop_api()
     outcome = run_bot()
 
-    # Chrome fails the CORS preflight and never sends the POST, so the bot sees no failed POST.
-    assert_timeout(outcome, "create_response", FAST.create_response)
-    assert outcome.ctx.of("create_requests") == []
-    assert fake.logins == []
+    # Chrome still logs the POST, and then logs it as failed, so this ends like a dropped reply.
+    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "create_request_failed")
+    requests = outcome.ctx.one("create_requests")
+    assert (requests["failed"], requests["responses"]) == (1, 0)
+    assert outcome.seconds < CHROME_START + FAST.create_response
+    assert_login_attempted(fake)
 
 
 def test_login_response_hang(fake, run_bot):
