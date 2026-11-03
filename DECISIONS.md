@@ -130,7 +130,7 @@ The platform owns `queued`, `running`, `success`, `blocked`, `failed`, `timeout`
 
 The run enters the credentials and submits, and the login response is saved as evidence. An earlier failure always wins, so login can never upgrade the status.
 
-This applies to runs already classified as failed, blocked, or `error` with `create_request_failed`: all of these are classified failures. The run stays in that status whatever the login does. A hanging `create` with no failure is still a timeout, so login is skipped. A timeout before the login step (page load, finding the checkbox, or no `create` response) ends the run without attempting login.
+This applies to runs already classified as failed, blocked, or `error` with `create_request_failed` or `unknown_captcha_type`: all of these are classified failures, and the run stays in that status whatever the login does. A timeout before the login step (page load, finding the checkbox, or no `create` response, including a `create` that hangs without failing) ends the run without attempting login.
 
 **Why:** the run follows every step in the PDF, there is one code path to test, and each run records what the server actually did. After an early timeout, the page may not be usable, so a login attempt would show little and could use up the remaining run time.
 
@@ -283,7 +283,7 @@ A fake server returns any outcome on demand, and a separate command runs against
 
 The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(url=..., timeouts=StepTimeouts(...))`. The production worker still calls `ArcaptchaBot()` with the defaults.
 
-**Result:** step 3 ran 49 tests (bot tests against the fake, plus codec and mode tests) in 91.3s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
+**Result:** step 3 ran 49 tests (bot tests against the fake, plus codec and mode tests) in 91.6s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
 
 **What the fake cannot prove:** it copies what we saw on the real site and what we read in the widget code. A pass on the fake only confirms our assumptions. The live command (`pytest -m live`) is the check for drift.
 
