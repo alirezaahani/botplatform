@@ -86,10 +86,10 @@ def credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
     """Run the real bot with real Chrome against the fake. Every run checks for the password."""
 
-    def run(url: str | None = None) -> Outcome:
+    def run(url: str | None = None, timeouts: StepTimeouts = FAST) -> Outcome:
         ctx = RecordingContext()
         started = time.monotonic()
-        result = ArcaptchaBot(url=url or fake.url, timeouts=FAST).run(ctx)
+        result = ArcaptchaBot(url=url or fake.url, timeouts=timeouts).run(ctx)
         outcome = Outcome(result, ctx, time.monotonic() - started)
         assert_no_password(outcome)
         return outcome

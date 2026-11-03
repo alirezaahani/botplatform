@@ -102,6 +102,10 @@ class FakeDemo:
         self._site.stop()
         self._api.stop()
 
+    def stop_api(self) -> None:
+        """Close the API origin's port, so the page's `create` call is refused."""
+        self._api.stop()
+
     async def _hang(self) -> None:
         while not self._release.is_set():
             await asyncio.sleep(0.05)

@@ -1,6 +1,7 @@
 """The ARCaptcha bot: real Selenium and real Chrome against the local fake demo site."""
 
 import socket
+from dataclasses import replace
 
 import pytest
 from selenium.webdriver.common.by import By
@@ -218,15 +219,27 @@ def test_create_hang(fake, run_bot):
     assert fake.logins == []
 
 
-def test_create_connection_dropped(fake, run_bot):
+def test_create_connection_dropped_is_an_error_straight_away(fake, run_bot):
     fake.creates = [Reply(action="drop", json={"status": "OK", "captcha_type": "accept"})]
+    # A long create timeout, so a regression to waiting it out fails the time check.
+    slow = replace(FAST, create_response=30)
+    outcome = run_bot(timeouts=slow)
+
+    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "create_request_failed")
+    requests = outcome.ctx.one("create_requests")
+    assert requests["failed"] == 1
+    assert requests["responses"] == 0
+    assert outcome.seconds < CHROME_START + FAST.more_create_responses + 5
+    assert_login_attempted(fake)  # decision 3b: a classified failure still logs in
+
+
+def test_create_api_origin_refuses_connections(fake, run_bot):
+    fake.stop_api()
     outcome = run_bot()
 
-    # The failed request produces no response, so the wait ends in a timeout. The
-    # `create_requests` event comes after that wait, so it is never reached.
+    # Chrome fails the CORS preflight and never sends the POST, so the bot sees no failed POST.
     assert_timeout(outcome, "create_response", FAST.create_response)
     assert outcome.ctx.of("create_requests") == []
-    assert outcome.ctx.of("create_response") == []
     assert fake.logins == []
 
 
@@ -245,6 +258,24 @@ def test_blocked_run_whose_login_hangs_stays_blocked(fake, run_bot):
 
     assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
     assert outcome.ctx.one("login_timeout") == {"step": "login_response"}
+
+
+def test_login_connection_dropped_is_an_error(fake, run_bot):
+    fake.login = Reply(action="drop", json={"msg": "You are logged in successfully!"})
+    outcome = run_bot()
+
+    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "login_request_failed")
+    assert outcome.ctx.of("login_request_failed") == [{}]
+    assert outcome.seconds < CHROME_START + FAST.create_response
+
+
+def test_blocked_run_whose_login_is_dropped_stays_blocked(fake, run_bot):
+    fake.creates = [create_reply("block")]
+    fake.login = Reply(action="drop", json={"msg": "Please solve captcha"})
+    outcome = run_bot()
+
+    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
+    assert outcome.ctx.of("login_request_failed") == [{}]
 
 
 # -- Other errors -------------------------------------------------------------------------------
