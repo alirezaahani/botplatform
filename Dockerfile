@@ -31,7 +31,8 @@ COPY migrations ./migrations
 USER app
 CMD ["uvicorn", "botplatform.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
-FROM base AS worker
+# System packages and the pinned Chrome, shared by the worker and test images.
+FROM base AS browser
 ENV CHROME_BINARY=/opt/chrome-linux64/chrome \
     CHROMEDRIVER_BINARY=/opt/chromedriver-linux64/chromedriver
 RUN apt-get update \
@@ -43,6 +44,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=chrome /opt/chrome-linux64 /opt/chrome-linux64
 COPY --from=chrome /opt/chromedriver-linux64 /opt/chromedriver-linux64
+
+FROM browser AS worker
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-install-project
@@ -51,3 +54,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-editable
 USER app
 CMD ["python", "-m", "botplatform.worker.main"]
+
+# Tests: the worker's browser plus pytest (dev group) and FastAPI for the fake demo page.
+FROM browser AS test
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra worker --extra web --no-install-project
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra worker --extra web --no-editable
+COPY tests ./tests
+USER app
+CMD ["pytest"]
