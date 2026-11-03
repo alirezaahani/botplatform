@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Fake ARCaptcha demo (not the real site)</title></head>
+<body>
+  <h1>Fake demo page</h1>
+  <form id="login-form" autocomplete="off">
+    <div id="widget">
+      <div id="input-checkbox" style="width:24px;height:24px;border:2px solid #555"></div>
+      <input type="hidden" id="arcaptcha-token" name="arcaptcha-token">
+      <div id="widget-message"></div>
+    </div>
+    <p><input id="email" type="email" name="email"></p>
+    <p><input id="password" type="password" name="password"></p>
+    <p><button>Login</button></p>
+  </form>
+  <div id="toasts" style="position:fixed;top:10px;right:10px"></div>
+  <script>
+    const CONFIG = __CONFIG__;
+    let challengeId = null;
+    window.arcaptcha = {
+      widgets: {w1: {getChallengeID: () => challengeId}},
+      getArcToken: () => challengeId,
+    };
+
+    // The same cipher as botplatform/bots/arcaptcha_codec.py. Plain JSON is accepted too.
+    function decode(buffer) {
+      try {
+        return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(buffer));
+      } catch (plainError) { /* not plain JSON, so it should be obfuscated */ }
+      const t = new Uint8Array(buffer);
+      let [e, r, n, o] = t;
+      let s = 90;
+      const out = [];
+      for (const p of t.subarray(4)) {
+        e = (e + r) & 255;
+        r = (r ^ n) & 255;
+        n = (n + o) & 255;
+        o = (o ^ e) & 255;
+        out.push(((((p >>> 3) | (p << 5)) & 255) - s & 255) ^ ((e + o) & 255));
+        s = p;
+      }
+      const padding = out[out.length - 1];
+      const body = out.slice(0, out.length - 1 - padding);
+      return JSON.parse(new TextDecoder().decode(new Uint8Array(body)));
+    }
+
+    function say(text, color) {
+      const el = document.createElement('div');
+      el.className = 'widget-message';
+      el.style.color = color || 'black';
+      el.textContent = text;
+      document.getElementById('widget-message').appendChild(el);
+    }
+
+    function showPopup(text) {
+      const popup = document.createElement('div');
+      popup.id = 'challenge';
+      popup.style.cssText = 'width:300px;height:150px;border:1px solid #999';
+      popup.textContent = text;
+      document.body.appendChild(popup);
+    }
+
+    function handleCreate(status, buffer) {
+      let data;
+      if (status >= 400) {
+        let message = 'Error ' + status;
+        try {
+          const body = decode(buffer);
+          message = body.message || body.msg || message;
+        } catch (error) { /* keep the generic message */ }
+        if (status === 422) { alert(message); } else { say(message, 'red'); }
+        return;
+      }
+      try { data = decode(buffer); } catch (error) { say('Cannot read the response', 'red'); return; }
+      const content = data.content || {};
+      if (data.captcha_type === 'block') {
+        document.getElementById('input-checkbox').style.display = 'none';
+        say('Blocked! Are you robot? Please refresh the page and try again', 'red');
+        return;  // like the real widget, a blocked run never stores its ID
+      }
+      if (content.challenge_id) {
+        challengeId = content.challenge_id;
+        document.getElementById('arcaptcha-token').value = challengeId;
+      }
+      if (data.captcha_type === 'puzzle') showPopup('puzzle');
+      if (data.captcha_type === 'question') showPopup('question');
+      if (content.softban) say(content.message, 'red');
+    }
+
+    function sendCreate(then) {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', CONFIG.api_origin + '/arcaptcha/api/create');
+      xhr.setRequestHeader('Content-Type', 'application/json');  // forces a CORS preflight
+      xhr.responseType = 'arraybuffer';
+      xhr.onload = () => { handleCreate(xhr.status, xhr.response); if (then) then(); };
+      xhr.send(JSON.stringify({site_key: 'fake'}));
+    }
+
+    document.getElementById('input-checkbox').addEventListener('click', () => {
+      sendCreate(CONFIG.second_create ? () => sendCreate() : null);
+      if (CONFIG.alert_on_click) alert(CONFIG.alert_on_click);
+    });
+
+    function toast(kind, text) {
+      const el = document.createElement('div');
+      el.className = 'Vue-Toastification__toast Vue-Toastification__toast--' + kind;
+      el.style.cssText = 'background:#eee;padding:8px;margin:4px';
+      document.getElementById('toasts').appendChild(el);
+      // The real toast animates in, so it exists a moment before its text does.
+      setTimeout(() => { el.textContent = text; }, 100);
+    }
+
+    document.getElementById('login-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/login');
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = () => {
+        let msg = null;
+        try { msg = JSON.parse(xhr.responseText).msg; } catch (error) { /* no message */ }
+        if (CONFIG.toast.none) return;
+        const kind = CONFIG.toast.kind || (xhr.status === 200 ? 'success' : 'error');
+        const text = CONFIG.toast.text !== null ? CONFIG.toast.text : (msg || 'Done');
+        setTimeout(() => toast(kind, text), 100);
+      };
+      xhr.send(JSON.stringify({
+        username: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        captcha_token: document.getElementById('arcaptcha-token').value,
+      }));
+    });
+  </script>
+</body>
+</html>
