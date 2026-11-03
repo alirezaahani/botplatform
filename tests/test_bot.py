@@ -160,12 +160,13 @@ def test_http_422_from_create_fails_and_records_the_alert(fake, run_bot):
     ("login", "toast"),
     [
         (Reply(status=401, json={"msg": "Wrong password"}), {}),
+        (Reply(status=401, json={"msg": "You are logged in successfully!"}), {"kind": "success"}),
         (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"kind": "error"}),
         (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"text": "Other"}),
         (Reply(status=200, json={}), {}),
         (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"none": True}),
     ],
-    ids=["401-red", "200-red", "200-different-text", "200-no-msg", "200-no-toast"],
+    ids=["401-red", "401-green", "200-red", "200-different-text", "200-no-msg", "200-no-toast"],
 )
 def test_login_not_confirmed_by_both_signals_fails(fake, run_bot, login, toast):
     fake.login = login
