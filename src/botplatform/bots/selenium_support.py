@@ -84,8 +84,8 @@ class ResponseWatcher:
 
     Call `poll()` regularly. Responses come back in the order they finished. Only POST
     requests count: a cross-origin call also logs a CORS preflight for the same URL, which is
-    ignored because its method is `OPTIONS` (Chrome 156 gives it the type `Other`). Request bodies are never read or stored, so
-    a password sent in a login request is never captured.
+    ignored because its method is `OPTIONS` (Chrome 156 gives it the type `Other`). Request
+    bodies are never read or stored, so a password sent in a login request is never captured.
     """
 
     def __init__(self, driver: webdriver.Chrome, matchers: dict[str, Callable[[str], bool]]):

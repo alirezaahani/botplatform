@@ -331,11 +331,11 @@ class Scenario:
         self.ctx.event("create_response", info)
 
     def _classify_create(self) -> BotResult | None:
-        # A response we could not decode has no type, so only decoded ones decide the outcome.
         if not self.creates and "create" in self.watcher.failed:
             return BotResult(
                 Status.ERROR, "create_request_failed", "The create request failed before a response"
             )
+        # A response we could not decode has no type, so only decoded ones decide the outcome.
         types = [c["captcha_type"] for c in self.creates if c["captcha_type"] is not None]
         if "block" in types:
             return BotResult(Status.BLOCKED, "captcha_blocked")
