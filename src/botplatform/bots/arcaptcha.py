@@ -231,7 +231,11 @@ class Scenario:
             "login_response", {"http_status": login.status, "body": self._body_text(login)}
         )
 
-        toast = self._wait_for(self._toast, self.timeouts.toast, "toast")
+        # The response has arrived, so a missing toast is a disagreement, not a timeout.
+        try:
+            toast = self._wait_for(self._toast, self.timeouts.toast, "toast")
+        except StepTimeout:
+            toast = {"kind": "none", "text": ""}
         self.ctx.event("toast", toast)
         message = body.get("msg") if isinstance(body, dict) else None
         confirmed = (
