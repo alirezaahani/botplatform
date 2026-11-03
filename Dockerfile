@@ -6,34 +6,48 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN pip install --no-cache-dir uv==0.13.1 \
     && useradd --create-home app
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+
+# Chrome for Testing and its matching chromedriver, pinned to one exact version (amd64 only).
+# This stage depends only on the version, so other changes never download Chrome again.
+FROM base AS chrome
+ARG CHROME_VERSION=156.0.8078.80
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+    && base="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64" \
+    && for name in chrome chromedriver; do \
+        curl -fsSL -o "/tmp/${name}.zip" "${base}/${name}-linux64.zip" \
+        && unzip -q "/tmp/${name}.zip" -d /opt && rm "/tmp/${name}.zip"; \
+    done
 
 FROM base AS web
-RUN uv sync --frozen --no-dev --extra web --no-editable
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra web --no-install-project
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra web --no-editable
 COPY alembic.ini ./
 COPY migrations ./migrations
 USER app
 CMD ["uvicorn", "botplatform.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS worker
-# Chrome for Testing and its matching chromedriver, pinned to one exact version (amd64 only).
-ARG CHROME_VERSION=156.0.8078.80
 ENV CHROME_BINARY=/opt/chrome-linux64/chrome \
     CHROMEDRIVER_BINARY=/opt/chromedriver-linux64/chromedriver
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl unzip fonts-liberation \
+        ca-certificates fonts-liberation \
         libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 \
         libgbm1 libglib2.0-0 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 \
         libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
-    && base="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64" \
-    && for name in chrome chromedriver; do \
-        curl -fsSL -o "/tmp/${name}.zip" "${base}/${name}-linux64.zip" \
-        && unzip -q "/tmp/${name}.zip" -d /opt && rm "/tmp/${name}.zip"; \
-    done \
-    && apt-get purge -y --auto-remove curl unzip \
     && rm -rf /var/lib/apt/lists/*
-RUN uv sync --frozen --no-dev --extra worker --no-editable
+COPY --from=chrome /opt/chrome-linux64 /opt/chrome-linux64
+COPY --from=chrome /opt/chromedriver-linux64 /opt/chromedriver-linux64
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra worker --no-install-project
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra worker --no-editable
 USER app
 CMD ["python", "-m", "botplatform.worker.main"]
