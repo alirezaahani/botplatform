@@ -17,6 +17,23 @@ USER app
 CMD ["uvicorn", "botplatform.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS worker
+# Chrome for Testing and its matching chromedriver, pinned to one exact version (amd64 only).
+ARG CHROME_VERSION=156.0.8078.80
+ENV CHROME_BINARY=/opt/chrome-linux64/chrome \
+    CHROMEDRIVER_BINARY=/opt/chromedriver-linux64/chromedriver
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl unzip fonts-liberation \
+        libasound2t64 libatk-bridge2.0-0 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 \
+        libgbm1 libglib2.0-0 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 \
+        libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+    && base="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64" \
+    && for name in chrome chromedriver; do \
+        curl -fsSL -o "/tmp/${name}.zip" "${base}/${name}-linux64.zip" \
+        && unzip -q "/tmp/${name}.zip" -d /opt && rm "/tmp/${name}.zip"; \
+    done \
+    && apt-get purge -y --auto-remove curl unzip \
+    && rm -rf /var/lib/apt/lists/*
 RUN uv sync --frozen --no-dev --extra worker --no-editable
 USER app
 CMD ["python", "-m", "botplatform.worker.main"]

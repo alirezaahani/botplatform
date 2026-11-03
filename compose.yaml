@@ -48,6 +48,9 @@ services:
     environment:
       <<: *database-env
       RUN_TIME_LIMIT_SECONDS: ${RUN_TIME_LIMIT_SECONDS:-180}
+      ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME:?set it in .env}
+      ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD:?set it in .env}
+    shm_size: 1gb
     depends_on:
       migrate:
         condition: service_completed_successfully
