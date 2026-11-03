@@ -16,6 +16,29 @@ The web container serves the UI and adds runs to a queue table. The worker takes
 - **One app container:** a browser failure, or a restart of the UI, would affect both the UI and active runs.
 - **A separate Selenium browser container:** `webdriver.Remote` lacks `execute_cdp_cmd`, and the service would be tied to Selenium.
 
+### 1a. Browser: Chrome for Testing
+
+The worker image installs one pinned version of Chrome for Testing and its matching chromedriver, currently 156.0.8078.80. Selenium gets the driver path directly, so Selenium Manager never downloads anything.
+
+**Why:** the browser and driver always match, and a rebuild on a fresh machine gets the same version.
+
+**Cost we accept:** it is a testing build, and we have not measured how that affects the block rate.
+
+**Rejected:**
+
+- **Google Chrome stable:** closest to what real users run, but the apt repo only serves the latest version, so a rebuild can change the browser. It remains a simple comparison if we need one.
+- **Debian `chromium`:** the simplest install, but Debian decides the version, and it is the furthest from real Chrome.
+
+**Not yet verified:** Chrome runs with `--no-sandbox` on the assumption that Docker's default seccomp profile blocks the sandbox. Chrome has not been tried without the flag, so this is to be tested.
+
+### 1b. Image layers: slow steps first
+
+The Chrome download has its own build stage that depends only on the version. Each image installs its dependencies before copying `src`, and a BuildKit cache mount keeps uv's downloads.
+
+**Why:** a source edit used to invalidate the Chrome and package layers, which downloaded everything again on each rebuild. In one measurement, the first build took 13m21s, about 12 minutes of it in the Chrome stage, and a source-only rebuild took 0.8s.
+
+**Cost we accept:** a fresh machine still downloads everything once, so the VM test and CI need time for that.
+
 ## 2. Bot interface
 
 ### 2a. Contract: `run(ctx) -> BotResult`
@@ -90,15 +113,19 @@ The platform owns `queued`, `running`, `success`, `blocked`, `failed`, `timeout`
 
 **Why:** the core stays free of ARCaptcha concepts, and a new bot can add reasons without changing it.
 
+**What counts as `success`:** the login response is HTTP 200, the toast has the success style, and the toast text contains the response's `msg`. Anything else is `verification_failed`. This has not been seen on the live site, because no live run has reached login without a block.
+
 **Rejected:** a single flat list, because each new bot's failure type would mean editing the core.
 
 ### 3b. Blocked runs still attempt login
 
 The run enters the credentials and submits, and the login response is saved as evidence. An earlier failure always wins, so login can never upgrade the status.
 
-**Why:** the run follows every step in the PDF, there is one code path to test, and each run records what the server actually did.
+This applies to runs already classified as failed or blocked. A timeout before the login step (page load, finding the checkbox, or no `create` response) ends the run without attempting login.
 
-**Evidence:** in a manual browser session captured on 2026-11-03 (HAR), `POST /api/login` with an empty `captcha_token` returned HTTP 400 with `{"msg":"Please solve captcha"}`. That session had a puzzle, not a block. We expect the same response after a block because the widget stores no token, but this has not been tested.
+**Why:** the run follows every step in the PDF, there is one code path to test, and each run records what the server actually did. After an early timeout, the page may not be usable, so a login attempt would show little and could use up the remaining run time.
+
+**Evidence:** in all 10 live runs on 2026-11-03, each of them blocked, `POST /api/login` returned HTTP 400 with `{"msg":"Please solve captcha"}`, and a red toast showed the same text (see section 8).
 
 **Rejected:** stopping at the block, because the run would skip required steps and record nothing about login.
 
@@ -285,9 +312,29 @@ The README includes real test output. CI runs the tests and a `docker compose up
 
 **Why:** something always runs, so running short of time cuts features, not the core workflow. The riskiest unknowns surface in step 2.
 
-### Bonus: decide after step 2, start after step 5
+### Step 2 results: every live run was blocked
 
-The bonus must stop by Friday morning, so the README and VM test keep their time.
+Ten headless runs from Docker on 2026-11-03, using plain Chrome for Testing with no measures against blocking:
+
+| Question | Result |
+|---|---|
+| Block rate | 10 of 10 blocked, and each run recorded its own 30-digit `challenge_id` |
+| Login after a block | HTTP 400 with `{"msg":"Please solve captcha"}`, and a red toast with the same text |
+| `getChallengeID()` on a blocked run | Empty on all 10, as were `getArcToken` and the hidden field, so the decoded `create` response is the only source |
+
+**Limits of this evidence:**
+
+- The cause of the block is unknown, because the server makes the decision.
+- All runs came from one machine and one IP, and headful has not been measured from Docker.
+- These outcomes have not occurred on the live site: `success`, a green toast, a puzzle, `accept`, a JS alert, a timeout, `missing_challenge_id` and `unknown_captcha_type`. The fake demo page has to cover them, which can only confirm our assumptions about the real success path.
+
+### Bonus: a time-boxed attempt after step 5
+
+We will start the bonus after step 5, as planned. It must stop by Friday morning, so the README and VM test keep their time.
+
+**Why:** step 3 onwards is required work, and the bonus is not. Fewer blocks may also not be enough to reach `success`, because manual Chrome always got the slider puzzle, so the bot would probably also need a slider solver.
+
+Blocked and failed attempts are reported as they happened, whatever the bonus achieves.
 
 ## Platform support
 
@@ -296,3 +343,5 @@ amd64 only. ARM64 was not considered, and the README states this limitation.
 ## Meaning of a blocked run
 
 A blocked run is a failed run, even when `challenge_id` was recorded, because the required scenario also includes logging in and verifying the result. The run stays visible in the history with its `challenge_id`.
+
+**Not confirmed:** this is our own reading of the PDF. We plan to ask ARCaptcha whether a blocked run with a recorded `challenge_id` counts as completing the workflow.
