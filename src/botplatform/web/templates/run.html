@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id }}{% endblock %}
+{% block content %}
+<div id="run"
+  {% if active %}hx-get="/runs/{{ run.id }}" hx-trigger="every 2s" hx-select="#run" hx-swap="outerHTML"{% endif %}>
+  <h1>Run <code>{{ run.id }}</code></h1>
+  {% if still_queued %}
+  <p class="notice">Still queued. Is the worker running? Check with <code>docker compose ps</code>.</p>
+  {% endif %}
+  <dl>
+    <dt>Status</dt><dd><span class="status {{ run.status }}">{{ run.status }}</span></dd>
+    <dt>Reason</dt><dd>{{ run.reason or "—" }}</dd>
+    <dt>Bot</dt><dd>{{ run.bot_id }}</dd>
+    <dt>Mode</dt><dd>{{ run.mode }}</dd>
+    <dt>Challenge ID</dt><dd><code>{{ run.challenge_id or "—" }}</code></dd>
+    <dt>Queued (UTC)</dt><dd>{{ run.queued_at.strftime("%Y-%m-%d %H:%M:%S") }}</dd>
+    <dt>Started (UTC)</dt><dd>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") if run.started_at else "—" }}</dd>
+    <dt>Ended (UTC)</dt><dd>{{ run.ended_at.strftime("%Y-%m-%d %H:%M:%S") if run.ended_at else "—" }}</dd>
+    <dt>Worker</dt><dd>{{ run.worker_id or "—" }}</dd>
+  </dl>
+  {% if run.error %}
+  <h2>Error</h2>
+  <pre>{{ run.error }}</pre>
+  {% endif %}
+  <h2>Timeline</h2>
+  {% if events %}
+  <table>
+    <thead><tr><th>Time (UTC)</th><th>Event</th><th>Data</th></tr></thead>
+    <tbody>
+      {% for event in events %}
+      <tr>
+        <td>{{ event.at.strftime("%H:%M:%S") }}</td>
+        <td>{{ event.type }}</td>
+        <td>{% if event.data %}<code>{{ event.data|tojson }}</code>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No events yet.</p>
+  {% endif %}
+  {% if artifacts %}
+  <h2>Files</h2>
+  {% for item in artifacts %}
+  <figure>
+    {% if item.content_type.startswith("image/") %}
+    <a href="/artifacts/{{ item.id }}"><img src="/artifacts/{{ item.id }}" alt="{{ item.name }}"></a>
+    <figcaption>{{ item.name }}</figcaption>
+    {% else %}
+    <a href="/artifacts/{{ item.id }}">{{ item.name }}</a>
+    {% endif %}
+  </figure>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

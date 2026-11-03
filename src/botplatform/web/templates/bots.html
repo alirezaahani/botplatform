@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Bots{% endblock %}
+{% block content %}
+<h1>Bots</h1>
+{% if not bots %}
+<p class="notice">No bots registered yet. Is the worker running? Check with <code>docker compose ps</code>.</p>
+{% endif %}
+{% for bot in bots %}
+<section class="card">
+  <h2>{{ bot.name }}</h2>
+  <p>{{ bot.description }}</p>
+  <form method="post" action="/bots/{{ bot.id }}/runs">
+    {% for mode in bot.modes %}
+    <button name="mode" value="{{ mode }}">Run {{ mode }}</button>
+    {% endfor %}
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

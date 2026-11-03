@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Run history{% endblock %}
+{% block content %}
+<h1>Run history</h1>
+<form method="get" action="/runs" class="filters">
+  <label>Status
+    <select name="status" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for status in statuses %}
+      <option value="{{ status.value }}" {% if status == selected_status %}selected{% endif %}>{{ status.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+<div id="runs"
+  {% if any_active %}hx-get="" hx-trigger="every 2s" hx-select="#runs" hx-swap="outerHTML"{% endif %}>
+  {% if runs %}
+  <table>
+    <thead>
+      <tr><th>Run</th><th>Bot</th><th>Mode</th><th>Status</th><th>Reason</th><th>Challenge ID</th><th>Queued (UTC)</th></tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td><a href="/runs/{{ run.id }}"><code>{{ run.id|string|truncate(8, true, "") }}</code></a></td>
+        <td>{{ run.bot_id }}</td>
+        <td>{{ run.mode }}</td>
+        <td><span class="status {{ run.status }}">{{ run.status }}</span></td>
+        <td>{{ run.reason or "" }}</td>
+        <td><code>{{ run.challenge_id or "" }}</code></td>
+        <td>{{ run.queued_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No runs to show.</p>
+  {% endif %}
+</div>
+<p class="pager">
+  {% set status_query = "&status=" ~ selected_status.value if selected_status else "" %}
+  {% if page > 1 %}<a href="/runs?page={{ page - 1 }}{{ status_query }}">Newer</a>{% endif %}
+  {% if has_next %}<a href="/runs?page={{ page + 1 }}{{ status_query }}">Older</a>{% endif %}
+</p>
+{% endblock %}
