@@ -301,7 +301,7 @@ def test_cors_preflight_is_not_counted(fake, run_bot):
     outcome = run_bot()
 
     requests = outcome.ctx.one("create_requests")
-    assert {"name": "create", "method": "OPTIONS", "type": "Preflight"} in requests["not_counted"]
+    assert [r["method"] for r in requests["not_counted"]] == ["OPTIONS"]
     assert requests["post_requests_started"] == 1
     assert requests["responses"] == fake.create_requests == 1
     assert requests["failed"] == 0
