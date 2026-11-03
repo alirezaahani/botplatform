@@ -7,6 +7,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar
+from urllib.parse import urlsplit
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -75,6 +76,17 @@ return {
 BLANK_PASSWORD_JS = "document.querySelectorAll('input[type=password]').forEach(e => e.value = '')"
 
 
+def redact(text: str, password: str, keep: str) -> str:
+    """Replace the password everywhere except inside `keep`, such as the site's host name.
+
+    A short password like `demo` would otherwise turn `demo.arcaptcha.co` into nonsense.
+    Anywhere else, even a match followed by a dot, is replaced: over-redacting is fine.
+    """
+    if not keep:
+        return text.replace(password, "[password]")
+    return keep.join(part.replace(password, "[password]") for part in text.split(keep))
+
+
 class StepTimeout(Exception):
     """A step ran out of time. `step` becomes the run's reason."""
 
@@ -108,9 +120,10 @@ class ArcaptchaBot(Bot):
         try:
             with chrome(headless=ctx.mode == "headless") as driver:
                 return Scenario(ctx, driver, username, password, self.url, self.timeouts).run()
-        except Exception:  # noqa: BLE001 - every failure becomes an error result, minus the password
+        except Exception:  # noqa: BLE001 - every failure becomes an error result
             # The password must never reach the run's error field, whatever the exception says.
-            details = traceback.format_exc().replace(password, "[password]")
+            host = urlsplit(self.url).hostname or ""
+            details = redact(traceback.format_exc(), password, host)
             return BotResult(Status.ERROR, "unhandled_exception", details)
 
 
