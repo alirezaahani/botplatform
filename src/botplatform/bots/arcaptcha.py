@@ -169,7 +169,8 @@ class Scenario:
             self._screenshot("login-error")
             return earlier
         self._screenshot("after-login")
-        return earlier or verdict
+        # Both steps found nothing wrong, so this is the only place a run can succeed.
+        return earlier or verdict or BotResult(Status.SUCCESS)
 
     # -- Steps -------------------------------------------------------------------------------
 
