@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from botplatform.contract import Bot, BotResult, RunContext, Status
 
 
@@ -7,7 +9,7 @@ class ExampleBot(Bot):
     id = "example"
     name = "Example bot"
     description = "Adds one timeline event and succeeds. It checks the platform, not a website."
-    modes = ["direct"]
+    modes: ClassVar[list[str]] = ["direct"]
 
     def run(self, ctx: RunContext) -> BotResult:
         ctx.event("hello", {"mode": ctx.mode})
