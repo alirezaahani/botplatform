@@ -306,7 +306,9 @@ class Scenario:
             if TOAST_ERROR in classes
             else "other"
         )
-        return {"kind": kind, "text": toast.text.strip()[:300]}
+        text = toast.text.strip()
+        # The toast animates in, so its text can be empty for a moment. Wait for the message.
+        return {"kind": kind, "text": text[:300]} if text else None
 
     @staticmethod
     def _json_body(response: CapturedResponse) -> Any:
