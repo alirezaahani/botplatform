@@ -82,9 +82,9 @@ class CapturedResponse:
 class ResponseWatcher:
     """Collects finished responses for chosen URLs, from Chrome's DevTools network events.
 
-    Call `poll()` regularly. Responses come back in the order they finished. Only real POST
-    requests count: a cross-origin call also logs a CORS preflight (`OPTIONS`, type `Preflight`)
-    for the same URL, which has no useful body. Request bodies are never read or stored, so a
+    Call `poll()` regularly. Responses come back in the order they finished. Only POST
+    requests count: a cross-origin call also logs a CORS preflight for the same URL, which is
+    ignored because its method is `OPTIONS` (Chrome 156 gives it the type `Other`). Request bodies are never read or stored, so a
     password sent in a login request is never captured.
     """
 
@@ -126,7 +126,7 @@ class ResponseWatcher:
         name = next((n for n, matches in self._matchers.items() if matches(request["url"])), None)
         if name is None:
             return
-        if request["method"] == "POST" and params.get("type") != "Preflight":
+        if request["method"] == "POST":
             self._tracked[request_id] = name
             self.started.append(name)
         else:
