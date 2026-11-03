@@ -27,6 +27,7 @@ worker = [
 
 [dependency-groups]
 dev = [
+    "pytest>=9.2.0",
     "ruff>=0.6",
 ]
 
@@ -36,3 +37,9 @@ build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Live tests need the real site, so they only run with `-m live`. No cache: /app is read-only.
+addopts = "-m 'not live' -p no:cacheprovider"
+markers = ["live: runs against the real demo.arcaptcha.co, not the local fake"]
