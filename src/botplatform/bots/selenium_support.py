@@ -57,7 +57,7 @@ def chrome(*, headless: bool) -> Iterator[webdriver.Chrome]:
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     if headless:
         options.add_argument("--headless=new")
-    # Chrome's sandbox needs kernel features that Docker's default profile blocks.
+    # Docker's default seccomp profile blocks Chrome's sandbox. See DECISIONS.md 1a.
     options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(
         options=options, service=Service(executable_path=os.environ["CHROMEDRIVER_BINARY"])

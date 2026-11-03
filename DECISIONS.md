@@ -29,7 +29,15 @@ The worker image installs one pinned version of Chrome for Testing and its match
 - **Google Chrome stable:** closest to what real users run, but the apt repo only serves the latest version, so a rebuild can change the browser. It remains a simple comparison if we need one.
 - **Debian `chromium`:** the simplest install, but Debian decides the version, and it is the furthest from real Chrome.
 
-**Not yet verified:** Chrome runs with `--no-sandbox` on the assumption that Docker's default seccomp profile blocks the sandbox. Chrome has not been tried without the flag, so this is to be tested.
+**Sandbox:** Chrome runs with `--no-sandbox`. Measured on 2026-11-03 on one host, with the worker image and Chrome 156:
+
+| Docker seccomp | `--no-sandbox` | Result |
+|---|---|---|
+| default | no | Chrome crashes: `FATAL ... No usable sandbox!` |
+| default | yes | works |
+| `--security-opt seccomp=unconfined` | no | works |
+
+**Why we keep the flag:** the bot visits one fixed site and runs as a non-root user inside a container. A custom seccomp profile is another file to maintain, and it could fail on a reviewer's machine. `seccomp=unconfined` weakens the container more than the flag does.
 
 ### 1b. Image layers: slow steps first
 
@@ -104,7 +112,7 @@ The platform owns `queued`, `running`, `success`, `blocked`, `failed`, `timeout`
 | What happened (ARCaptcha bot) | Status | Reason |
 |---|---|---|
 | Login response and toast both confirm success | `success` | none |
-| Login rejected, or the response and toast disagree | `failed` | `verification_failed` |
+| Login rejected, or the response and toast disagree (or no toast appears) | `failed` | `verification_failed` |
 | No ID, and no block | `failed` | `missing_challenge_id` |
 | The server returned `block` | `blocked` | `captcha_blocked` |
 | A puzzle appeared and we have no solver | `blocked` | `challenge_unsolved` |
@@ -272,6 +280,12 @@ A fake server returns any outcome on demand, and a separate command runs against
 
 **Why:** the required failures are repeatable without relying on ARCaptcha or the IP, while real selectors and network capture still get exercised. The live command catches drift between the fake page and the real site.
 
+The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(url=..., timeouts=StepTimeouts(...))`. The production worker still calls `ArcaptchaBot()` with the defaults.
+
+**Result:** step 3 ran 43 bot tests against the fake in 84.7s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
+
+**What the fake cannot prove:** it copies what we saw on the real site and what we read in the widget code. A pass on the fake only confirms our assumptions. The live command (`pytest -m live`) is the check for drift.
+
 **Rejected:**
 
 - **A mocked driver:** it only tests our assumptions about the browser.
@@ -282,6 +296,8 @@ A fake server returns any outcome on demand, and a separate command runs against
 Tests use the worker image and a real Postgres, through one Compose command.
 
 **Why:** reviewers need only Docker, the tests use the browser we ship, and `SKIP LOCKED` is tested for real.
+
+Bot tests use their own file, `compose.test.yaml`: `docker compose -f compose.test.yaml run --rm tests`. It has its own project name, `botplatform-test`, so it cannot touch the main stack's containers or database volume. It needs no `.env`, and bot tests need no database. The `test` image stage reuses the worker's Chrome and system layers and adds pytest and FastAPI, so production images gain neither. Live tests are off by default: `... run --rm tests pytest -m live -v -s`.
 
 **Cost we accept:** tests run more slowly during development.
 
