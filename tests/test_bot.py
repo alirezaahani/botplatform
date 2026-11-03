@@ -6,7 +6,7 @@ import pytest
 from selenium.webdriver.common.by import By
 
 from botplatform.bots import arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, Scenario
+from botplatform.bots.arcaptcha import ArcaptchaBot, Scenario, redact
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
@@ -338,3 +338,17 @@ def test_unhandled_exception_text_hides_the_password(fake, run_bot, monkeypatch)
     assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "unhandled_exception")
     assert "[password]" in outcome.result.error
     assert PASSWORD not in outcome.result.error
+
+
+def test_redact_keeps_the_site_host_but_hides_the_password_elsewhere():
+    text = "https://demo.arcaptcha.co/ rejected demo."
+    assert redact(text, "demo", "demo.arcaptcha.co") == (
+        "https://demo.arcaptcha.co/ rejected [password]."
+    )
+
+
+def test_redact_hides_a_password_that_is_not_in_the_host():
+    text = "https://demo.arcaptcha.co/ failed for s3cret and s3cret."
+    assert redact(text, "s3cret", "demo.arcaptcha.co") == (
+        "https://demo.arcaptcha.co/ failed for [password] and [password]."
+    )
