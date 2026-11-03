@@ -282,7 +282,7 @@ A fake server returns any outcome on demand, and a separate command runs against
 
 The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(url=..., timeouts=StepTimeouts(...))`. The production worker still calls `ArcaptchaBot()` with the defaults.
 
-**Result:** step 3 ran 43 bot tests against the fake in 84.7s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
+**Result:** step 3 ran 44 tests (bot tests against the fake, plus codec and mode tests) in 87.2s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
 
 **What the fake cannot prove:** it copies what we saw on the real site and what we read in the widget code. A pass on the fake only confirms our assumptions. The live command (`pytest -m live`) is the check for drift.
 
