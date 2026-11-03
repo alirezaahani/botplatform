@@ -52,7 +52,7 @@ def execute(sessions: sessionmaker, run_id: uuid.UUID) -> BotResult:
 
     try:
         return bot_class().run(DatabaseRunContext(sessions, run_id, mode))
-    except Exception:
+    except Exception:  # noqa: BLE001 - any bot failure becomes an error result
         return BotResult(Status.ERROR, "unhandled_exception", traceback.format_exc())
 
 
