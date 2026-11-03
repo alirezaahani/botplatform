@@ -40,6 +40,7 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Live tests need the real site, so they only run with `-m live`. No cache: /app belongs to root and the tests run as user `app`.
+# Live tests need the real site, so they only run with `-m live`.
+# No cache: /app belongs to root and the tests run as user `app`.
 addopts = "-m 'not live' -p no:cacheprovider"
 markers = ["live: runs against the real demo.arcaptcha.co, not the local fake"]
