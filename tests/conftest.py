@@ -1,6 +1,6 @@
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -59,7 +59,6 @@ class Outcome:
     result: BotResult
     ctx: RecordingContext
     seconds: float
-    steps: list[str] = field(default_factory=list)
 
 
 def assert_no_password(outcome: Outcome) -> None:
