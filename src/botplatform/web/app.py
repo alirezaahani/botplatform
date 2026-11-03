@@ -45,9 +45,7 @@ def home() -> RedirectResponse:
 
 @app.get("/bots", response_class=HTMLResponse)
 def list_bots(request: Request, session: DbSession) -> HTMLResponse:
-    bots = session.scalars(
-        select(BotRecord).where(BotRecord.active).order_by(BotRecord.name)
-    ).all()
+    bots = session.scalars(select(BotRecord).where(BotRecord.active).order_by(BotRecord.name)).all()
     return templates.TemplateResponse(request, "bots.html", {"bots": bots})
 
 

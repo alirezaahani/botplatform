@@ -39,7 +39,5 @@ def publish(session: Session, bots: list[type[Bot]]) -> None:
             )
         )
     session.execute(
-        update(BotRecord)
-        .where(BotRecord.id.not_in([bot.id for bot in bots]))
-        .values(active=False)
+        update(BotRecord).where(BotRecord.id.not_in([bot.id for bot in bots])).values(active=False)
     )
