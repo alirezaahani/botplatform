@@ -7,7 +7,11 @@ export DISPLAY=:99
 # A restarted container keeps /tmp, and a stale lock stops Xvfb from starting.
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
-while [ ! -S /tmp/.X11-unix/X99 ]; do sleep 0.1; done
+xvfb=$!
+while [ ! -S /tmp/.X11-unix/X99 ]; do
+    kill -0 "$xvfb" 2>/dev/null || { echo "start.sh: Xvfb did not start" >&2; exit 1; }
+    sleep 0.1
+done
 # VNC listens on localhost only. websockify is the only way in, on port 6080 inside the network.
 x11vnc -display :99 -localhost -nopw -shared -forever -rfbport 5900 -quiet &
 websockify --web /usr/share/novnc 6080 localhost:5900 &

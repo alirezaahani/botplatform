@@ -49,7 +49,8 @@ FROM browser AS worker
 # The virtual display and the viewer (see worker/start.sh). The web image never gets these.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -m 1777 /tmp/.X11-unix
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-install-project
