@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from botplatform import batch
-from botplatform.bots.profiles import PROFILES, bot_id
+from botplatform.profiles import PROFILES, bot_id
 from botplatform.contract import Status
 from botplatform.db import BotRecord, Run
 from botplatform.worker import queue
@@ -212,3 +212,16 @@ def test_batch_against_the_real_queue_with_a_stand_in_worker(db: sessionmaker):
             "arcaptcha": 3,
             "arcaptcha-no-cdc": 3,
         }
+
+
+def test_web_side_modules_import_without_selenium():
+    """The web image has no Selenium. Importing a `bots` module there would crash the batch CLI."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.modules['selenium'] = None\n"
+        "import botplatform.batch, botplatform.web.app, botplatform.web.bonus, botplatform.stats\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

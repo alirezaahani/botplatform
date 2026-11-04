@@ -4,7 +4,7 @@ import pytest
 
 from botplatform.bots import BOTS, arcaptcha
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
-from botplatform.bots.profiles import BASELINE, PROFILES, STEALTH_FLAGS, Profile
+from botplatform.profiles import BASELINE, PROFILES, STEALTH_FLAGS, Profile
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
 from botplatform.worker.registry import validate

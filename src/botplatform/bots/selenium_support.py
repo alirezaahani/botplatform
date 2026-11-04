@@ -15,7 +15,7 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.chrome.service import Service
 
-from botplatform.bots.profiles import BASELINE, Profile
+from botplatform.profiles import BASELINE, Profile
 
 
 def call_handling_alerts[T](

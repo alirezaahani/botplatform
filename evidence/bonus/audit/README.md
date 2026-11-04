@@ -36,7 +36,7 @@ Four live runs on 2026-11-04 from the project's Docker stack on the developer's 
 
 - `stealth-flags` also removes Chrome's "controlled by automated test software" infobar, which is why its window is taller (437 vs 380 headless, 656 vs 599 headful).
 - The request has a field `CR` with the value `FAKE_CR` in every run. We do not know what the site does with it.
-- The flags the profiles use are in `src/botplatform/bots/profiles.py`, with the reason for each in its description.
+- The flags the profiles use are in `src/botplatform/profiles.py`, with the reason for each in its description.
 
 ## Environment leaks from Docker, and limits we imposed
 

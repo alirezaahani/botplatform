@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
-from botplatform.bots.profiles import PROFILES, bot_id
+from botplatform.profiles import PROFILES, bot_id
 from botplatform.contract import ACTIVE_STATUSES
 from botplatform.db import BotRecord, Run, session_factory
 from botplatform.worker import queue

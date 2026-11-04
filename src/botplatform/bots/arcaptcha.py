@@ -14,7 +14,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha_codec import decode_body
-from botplatform.bots.profiles import BASELINE, PROFILES, Profile, bot_id
+from botplatform.profiles import BASELINE, PROFILES, Profile, bot_id
 from botplatform.bots.selenium_support import (
     CapturedResponse,
     ResponseWatcher,
