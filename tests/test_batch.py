@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from botplatform import batch
-from botplatform.profiles import PROFILES, bot_id
 from botplatform.contract import Status
 from botplatform.db import BotRecord, Run
+from botplatform.profiles import PROFILES, bot_id
 from botplatform.worker import queue
 
 A, B = ("arcaptcha", "headless"), ("arcaptcha-no-cdc", "headless")
