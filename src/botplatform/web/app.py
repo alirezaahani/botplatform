@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from botplatform.contract import ACTIVE_STATUSES, Status
 from botplatform.db import BotRecord, Run, RunArtifact, RunEvent
 from botplatform.web import live
-from botplatform.web.deps import DbSession
+from botplatform.web.deps import DbSession, parse_id
 
 HERE = Path(__file__).parent
 PAGE_SIZE = 50
@@ -90,16 +90,16 @@ def list_runs(
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
-def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLResponse:
-    run = session.get(Run, run_id)
+def run_detail(run_id: str, request: Request, session: DbSession) -> HTMLResponse:
+    run = session.get(Run, parse_id(run_id))
     if run is None:
         raise HTTPException(404, "No such run")
     events = session.scalars(
-        select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.id)
+        select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id)
     ).all()
     artifacts = session.execute(
         select(RunArtifact.id, RunArtifact.name, RunArtifact.content_type)
-        .where(RunArtifact.run_id == run_id)
+        .where(RunArtifact.run_id == run.id)
         .order_by(RunArtifact.created_at)
     ).all()
     still_queued = (
@@ -122,8 +122,8 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
 
 
 @app.get("/artifacts/{artifact_id}")
-def artifact(artifact_id: uuid.UUID, session: DbSession) -> Response:
-    item = session.get(RunArtifact, artifact_id)
+def artifact(artifact_id: str, session: DbSession) -> Response:
+    item = session.get(RunArtifact, parse_id(artifact_id, "No such artifact"))
     if item is None:
         raise HTTPException(404, "No such artifact")
     return Response(item.data, media_type=item.content_type)

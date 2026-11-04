@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from botplatform.contract import ACTIVE_STATUSES
 from botplatform.db import Run, RunEvent, session_factory
-from botplatform.web.deps import DbSession
+from botplatform.web.deps import DbSession, parse_id
 
 VIEWER_PORT = 6080
 VIEWER_RECHECK_SECONDS = 2.0
@@ -45,16 +45,18 @@ def novnc_page(run_id: uuid.UUID) -> RedirectResponse:
 
 
 @router.get("/runs/{run_id}/live")
-def live(run_id: uuid.UUID, session: DbSession) -> RedirectResponse:
-    viewer_url(session, run_id)
-    return novnc_page(run_id)
+def live(run_id: str, session: DbSession) -> RedirectResponse:
+    run_uuid = parse_id(run_id)
+    viewer_url(session, run_uuid)
+    return novnc_page(run_uuid)
 
 
 @router.get("/runs/{run_id}/live/{path:path}")
-async def live_file(run_id: uuid.UUID, path: str, session: DbSession) -> Response:
-    base = viewer_url(session, run_id)
+async def live_file(run_id: str, path: str, session: DbSession) -> Response:
+    run_uuid = parse_id(run_id)
+    base = viewer_url(session, run_uuid)
     if not path:
-        return novnc_page(run_id)
+        return novnc_page(run_uuid)
     try:
         async with httpx.AsyncClient() as client:
             upstream = await client.get(f"{base}/{path}")
@@ -68,9 +70,10 @@ async def live_file(run_id: uuid.UUID, path: str, session: DbSession) -> Respons
 
 
 @router.websocket("/runs/{run_id}/live/websockify")
-async def live_socket(websocket: WebSocket, run_id: uuid.UUID, session: DbSession) -> None:
+async def live_socket(websocket: WebSocket, run_id: str, session: DbSession) -> None:
     try:
-        base = viewer_url(session, run_id)
+        run_uuid = parse_id(run_id)
+        base = viewer_url(session, run_uuid)
     except HTTPException:
         await websocket.close(code=1008)
         return
@@ -84,8 +87,8 @@ async def live_socket(websocket: WebSocket, run_id: uuid.UUID, session: DbSessio
             max_size=None,
         ) as upstream:
             await websocket.accept(subprotocol=upstream.subprotocol)
-            await run_in_threadpool(record_viewer, run_id)
-            await pump(websocket, upstream, run_id)
+            await run_in_threadpool(record_viewer, run_uuid)
+            await pump(websocket, upstream, run_uuid)
     except (OSError, websockets.WebSocketException):
         await websocket.close(code=1011)
 
