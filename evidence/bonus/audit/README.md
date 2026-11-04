@@ -37,3 +37,27 @@ Four live runs on 2026-11-04 from the project's Docker stack on the developer's 
 - `stealth-flags` also removes Chrome's "controlled by automated test software" infobar, which is why its window is taller (437 vs 380 headless, 656 vs 599 headful).
 - The request has a field `CR` with the value `FAKE_CR` in every run. We do not know what the site does with it.
 - The flags the profiles use are in `src/botplatform/bots/profiles.py`, with the reason for each in its description.
+
+## Environment leaks from Docker, and limits we imposed
+
+The `fingerPrintComponents` in the same `create` request (identical in the baseline runs, apart from the WebGL items) show what the container reveals. These are observations from the four runs, not proof that the server uses any of them.
+
+| Item | What the container shows | Why it may stand out |
+|---|---|---|
+| Installed fonts | `fonts: []`, and `fontPreferences` gives the same width for `serif`, `apple` and `default` | The image has almost no fonts, so every generic family falls back to one face. A desktop browser has dozens. |
+| WebGL | headless: SwiftShader (software); headful: none (`webGlBasics: -1`, `webGlExtensions: -1`) | No GPU in the container. |
+| Time zone and language | `UTC`, `en-US` only | A container default, and unusual for a real user (the demo is an Iranian site). Not tested yet. |
+| Audio | `audioBaseLatency: -2` | No audio device. |
+| Screen | `screenFrame: [0,0,0,0]` (no taskbar or menu bar), headless 800x600, headful fixed 1280x800 | Real desktops have a larger screen and a non-zero frame. |
+| CPU and memory | 8 cores, 16 GB | These are the host's values, because the container is not limited. They look normal. |
+| TLS (JA4) and IP | Sent from the host's network stack and IP | Docker does not change either, and manual Chrome got a puzzle from the same IP, so the IP and TLS from this machine are unlikely to be the cause. |
+
+What Docker does not leak to the page: `/.dockerenv`, cgroups and the hostname are not reachable from page JavaScript. The container only affects what the browser itself can see, which is the table above.
+
+**Limits we set that may constrain bot development later:**
+
+- The headful screen is fixed at 1280x800 by `worker/start.sh` (Xvfb) and by the base Chrome arguments. A profile can change the window size, because its arguments come last, but not the screen itself.
+- Chrome for Testing is pinned to one version (DECISIONS.md 1a), so we have not compared it with Chrome stable.
+- We read network responses through Chrome's performance log, so a profile that turns the log off has no way to read `create`. Such a profile would need another capture method.
+
+Fonts, time zone, language and screen are candidates for later profiles if the first matrix shows that `cdc_` and WebGL are not enough.
