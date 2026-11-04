@@ -1,20 +1,20 @@
 """The web UI. It reads and queues runs through the database, and never imports bot code."""
 
 import uuid
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, Response
+from fastapi import FastAPI, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 from botplatform.contract import ACTIVE_STATUSES, Status
-from botplatform.db import BotRecord, Run, RunArtifact, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunArtifact, RunEvent
+from botplatform.web import live
+from botplatform.web.deps import DbSession
 
 HERE = Path(__file__).parent
 PAGE_SIZE = 50
@@ -22,15 +22,8 @@ STILL_QUEUED_AFTER = timedelta(minutes=1)
 
 app = FastAPI(title="Bot Platform")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+app.include_router(live.router)
 templates = Jinja2Templates(directory=HERE / "templates")
-
-
-def get_session() -> Iterator[Session]:
-    with session_factory()() as session:
-        yield session
-
-
-DbSession = Annotated[Session, Depends(get_session)]
 
 
 @app.get("/healthz")
