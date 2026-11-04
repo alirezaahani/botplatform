@@ -20,7 +20,12 @@ TARGET = ROW["cv_target"]
 IDS = [f"{i:030d}" for i in range(1, 6)]
 SOLVE = replace(FAST, puzzle_ready=6, puzzle_images=4, answer_settle=2, solve_attempts=3)
 BY_ID = {bot.id: bot for bot in SOLVER_BOTS}
-BOT_IDS = ["arcaptcha-solver-cv-linear", "arcaptcha-solver-cv-eased"]
+BOT_IDS = [
+    "arcaptcha-solver-cv-linear",
+    "arcaptcha-solver-cv-eased",
+    "arcaptcha-solver-silhouette-linear",
+    "arcaptcha-solver-silhouette-eased",
+]
 
 
 @pytest.fixture
@@ -56,11 +61,12 @@ def test_both_bots_solve_on_the_first_attempt(solve, fake, bot_id):
     assert [a["answer"] for a in fake.answer_requests] == [TARGET]
     assert len(fake.logins) == 1
     mover = bot_id.rsplit("-", 1)[1]
+    finder = bot_id.split("-")[2]
     assert ctx.one("solve_started")["mover"] == mover
     attempt = ctx.one("solve_attempt")
     assert attempt["n"] == 1
     assert attempt["challenge_id"] == IDS[0]
-    assert attempt["finder"] == "cv"
+    assert attempt["finder"] == finder
     assert attempt["mover"] == mover
     assert attempt["target_x"] == attempt["dx"] == TARGET
     assert attempt["stuck_retries"] == 0
@@ -133,12 +139,15 @@ def test_a_handle_that_never_moves_gives_up_after_the_retries(solve, fake):
 
 
 def test_the_solver_bots_are_registered_for_headful_with_a_plain_description():
-    assert [b.id for b in BOTS][-2:] == BOT_IDS
+    assert [b.id for b in BOTS][-4:] == BOT_IDS
     for bot in SOLVER_BOTS:
         assert bot.modes == ["headful"]
         assert bot.profile is ALL_SIGNALS
         assert "automatic solver" in bot.name
         assert "automatic solver" in bot.description
-    linear, eased = SOLVER_BOTS
-    assert "cv finder" in linear.name and "linear movement" in linear.name
-    assert "eased movement" in eased.name
+    cv_linear, cv_eased, sil_linear, sil_eased = SOLVER_BOTS
+    assert "cv finder" in cv_linear.name and "linear movement" in cv_linear.name
+    assert "eased movement" in cv_eased.name
+    assert "silhouette finder" in sil_linear.name and "linear movement" in sil_linear.name
+    assert "silhouette finder" in sil_eased.name and "eased movement" in sil_eased.name
+    assert "silhouette" in sil_linear.description
