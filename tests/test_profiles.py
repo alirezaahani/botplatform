@@ -96,7 +96,6 @@ def test_run_records_profile_signals_and_create_request(fake, credentials, profi
     assert "tester@example.com" not in repr(ctx.events)
 
 
-
 def test_undecodable_request_body_is_noted_not_fatal():
     garbage = CapturedResponse("create", "u", 201, b'{"captcha_type":"accept"}', None, b"\x01\x02")
     record = arcaptcha.Scenario._create_request_record(garbage)
