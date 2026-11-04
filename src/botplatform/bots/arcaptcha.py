@@ -1,5 +1,14 @@
-"""The ARCaptcha demo bot: tick the checkbox, read `challenge_id`, log in, verify the result."""
+"""The ARCaptcha demo bot: tick the checkbox, read `challenge_id`, log in, verify the result.
 
+Puzzle capture (data for a future slider solver): when a `create` of type `puzzle` arrives and its
+two images are on screen, the scenario saves them as artifacts `puzzle-<n>-background.<ext>` and
+`puzzle-<n>-piece.<ext>` and records a `puzzle_captured` event (n counts puzzles in the run from 1).
+Events are appended in order, so the `answer_request` events that follow a `puzzle_captured`
+event, up to the next one, belong to puzzle n; the `answer` record itself is unchanged. A failed
+capture records `puzzle_capture_failed` and never changes the run's result.
+"""
+
+import base64
 import json
 import os
 import time
@@ -52,6 +61,8 @@ class StepTimeouts:
     # puzzle as finished (a guess the live experiment checks).
     person_wait: float = 130
     answer_settle: float = 3
+    # How long a captured puzzle's two images get to load after its `create` arrives.
+    puzzle_images: float = 5
 
 
 DEFAULT_TIMEOUTS = StepTimeouts()
@@ -147,6 +158,85 @@ if (!navigator.permissions || !navigator.permissions.query) {
   );
 }
 """
+
+
+# The puzzle's images. The piece is `img.puzzle` and the background is the other image whose src
+# has `/puzzles/` (both seen in the real DOM). The slider's selectors are NOT known, so instead of
+# inventing one this lists elements whose class name mentions slider, handle, track or drag, and
+# always records the piece's parent. A src already in `seen` belongs to an earlier puzzle.
+PUZZLE_INFO_JS = """
+const seen = arguments[0];
+const piece = document.querySelector('img.puzzle');
+if (!piece || !piece.src) return null;
+const background = Array.from(document.querySelectorAll('img')).find(
+  (img) => img !== piece && img.src.includes('/puzzles/')
+);
+if (!background || !background.src) return null;
+if (seen.includes(piece.src) || seen.includes(background.src)) return null;
+const loaded = (img) => img.complete && img.naturalWidth > 0;
+if (!loaded(piece) || !loaded(background)) return null;
+const rect = (el) => {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return {x: r.x, y: r.y, width: r.width, height: r.height};
+};
+const image = (img) => ({
+  src: img.src, natural_width: img.naturalWidth, natural_height: img.naturalHeight,
+  rect: rect(img)
+});
+const computed = getComputedStyle(piece);
+return {
+  background: image(background),
+  piece: Object.assign(image(piece), {
+    style_left: piece.style.left, style_top: piece.style.top,
+    computed_left: computed.left, computed_top: computed.top
+  }),
+  wrapper_rect: rect(background.parentElement),
+  piece_parent_rect: rect(piece.parentElement),
+  slider_candidates: Array.from(document.querySelectorAll('[class*=slider i], [class*=handle i], '
+    + '[class*=track i], [class*=drag i]')).filter((el) => el !== piece).slice(0, 10).map(
+    (el) => ({tag: el.tagName.toLowerCase(), class: String(el.className), rect: rect(el)})
+  ),
+  device_pixel_ratio: window.devicePixelRatio
+};
+"""
+# Downloads the two images from inside the page, so the request has the browser's origin and
+# cookies. Returns base64 for each, plus the response's content type.
+FETCH_IMAGES_JS = """
+const done = arguments[arguments.length - 1];
+const get = async (src) => {
+  const response = await fetch(src);
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return {b64: btoa(binary), content_type: response.headers.get('content-type')};
+};
+Promise.all([get(arguments[0]), get(arguments[1])]).then(
+  (images) => done({background: images[0], piece: images[1]}),
+  (error) => done({error: String(error)})
+);
+"""
+IMAGE_TYPES = [
+    (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
+    (b"\xff\xd8\xff", "image/jpeg", "jpg"),
+    (b"GIF8", "image/gif", "gif"),
+]
+
+
+def sniff_image(data: bytes, header: str | None) -> tuple[str, str]:
+    """The content type and file extension of image bytes, from their first bytes."""
+    for magic, content_type, extension in IMAGE_TYPES:
+        if data.startswith(magic):
+            return content_type, extension
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    if header and header.startswith("image/"):
+        content_type = header.split(";")[0].strip()
+        return content_type, content_type.split("/")[1].split("+")[0]
+    return "application/octet-stream", "bin"
 
 
 class StepTimeout(Exception):
@@ -286,6 +376,8 @@ class Scenario:
         # When the latest `answer` arrived, unless a new `create` followed it.
         self.answered_at: float | None = None
         self.person_solved = False
+        self.puzzles = 0  # puzzles seen so far, captured or not
+        self.puzzle_srcs: list[str] = []  # image srcs already taken, to tell a new puzzle apart
 
     def run(self) -> BotResult:
         try:
@@ -503,6 +595,41 @@ class Scenario:
             self.ctx.record_challenge_id(challenge_id)
         self.answered_at = None  # a new puzzle after an answer means the answer was not final
         self.ctx.event("create_response", info)
+        if info["captcha_type"] == "puzzle":
+            self._capture_puzzle(challenge_id)
+
+    def _capture_puzzle(self, challenge_id: str | None) -> None:
+        """Save the puzzle's two images and its geometry. Any failure is recorded, never raised."""
+        self.puzzles += 1
+        n = self.puzzles
+        try:
+            info = self._wait_for(
+                lambda: self.driver.execute_script(PUZZLE_INFO_JS, self.puzzle_srcs),
+                self.timeouts.puzzle_images,
+                "puzzle_images",
+            )
+            srcs = [info["background"]["src"], info["piece"]["src"]]
+            self.puzzle_srcs.extend(srcs)
+            fetched = self._do(lambda: self.driver.execute_async_script(FETCH_IMAGES_JS, *srcs))
+            if not isinstance(fetched, dict) or "error" in fetched:
+                raise RuntimeError((fetched or {}).get("error", "no result"))
+            saved = {}
+            for part in ("background", "piece"):
+                data = base64.b64decode(fetched[part]["b64"])
+                content_type, extension = sniff_image(data, fetched[part]["content_type"])
+                name = f"puzzle-{n}-{part}.{extension}"
+                self.ctx.artifact(name, content_type, data)
+                saved[part] = name
+            self.ctx.event(
+                "puzzle_captured",
+                {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info},
+            )
+        except Exception as error:  # noqa: BLE001 - a missing capture must not change the result
+            message = str(error).splitlines()[0][:200] if str(error) else ""
+            self.ctx.event(
+                "puzzle_capture_failed",
+                {"challenge_id": challenge_id, "n": n, "type": type(error).__name__, "message": message},
+            )
 
     def _record_browser_signals(self) -> None:
         try:
