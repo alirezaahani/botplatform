@@ -46,14 +46,19 @@ COPY --from=chrome /opt/chrome-linux64 /opt/chrome-linux64
 COPY --from=chrome /opt/chromedriver-linux64 /opt/chromedriver-linux64
 
 FROM browser AS worker
+# The virtual display and the viewer (see worker/start.sh). The web image never gets these.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-install-project
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-editable
+COPY --chmod=755 worker/start.sh /usr/local/bin/start-worker
 USER app
-CMD ["python", "-m", "botplatform.worker.main"]
+CMD ["start-worker"]
 
 # Tests: the worker's browser plus pytest (dev group) and FastAPI for the fake demo page.
 FROM browser AS test
