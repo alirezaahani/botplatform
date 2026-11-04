@@ -1,6 +1,6 @@
 # Bot platform
 
-A small platform that runs bots and records every run. A web UI launches a run, a worker executes it (a real Chrome for browser bots), and Postgres holds the queue, the status, the timeline and the screenshots. It ships with two bots: a trivial `example` bot and an ARCaptcha demo-site bot.
+A small platform that runs bots and records every run. A web UI launches a run, a worker executes it (a real Chrome for browser bots), and Postgres holds the queue, the status, the timeline and the screenshots. It ships with a trivial `example` bot, an ARCaptcha demo-site bot, and variants of that bot used for the bonus work (see [Reducing CAPTCHA blocking](#reducing-captcha-blocking-bonus)).
 
 ```
 browser --> web --> Postgres <-- worker(s)
@@ -26,7 +26,8 @@ Open http://127.0.0.1:8000, pick a bot on `/bots` and press launch. The first bu
 
 ## Using it
 
-- `/bots`: the registered bots and their modes, with a launch button for each.
+- `/bots`: the registered bots and their modes, with a launch button for each. The newest bot is first. The list has the baseline `arcaptcha`, one `arcaptcha-<profile>` bot per browser profile, the assisted bot `arcaptcha-assisted`, and the `example` bot.
+- `/bonus` and `/bonus.md`: the bonus report, for each bot and mode, how often the site did not block the bot (filters `?bot=` and `?since=`). "Not blocked" means that the first `create` answer of a run had a CAPTCHA type other than `block`. It does not mean the run succeeded.
 - `/runs`: the run history.
 - `/runs/{id}`: status, reason, `challenge_id`, the timeline and screenshots. The page refreshes while the run is active.
 - The `example` bot (mode `direct`) uses no browser, adds one timeline event and succeeds. It checks the platform itself.
@@ -64,6 +65,56 @@ ssh -L 8000:127.0.0.1:8000 user@server
 ```
 
 To check that the worker image brings up the display and viewer, run `tests/check_viewer.sh`.
+
+## Reducing CAPTCHA blocking (bonus)
+
+The approach: the site blocks the plain bot at the first `create` request, so the bot can take a different browser profile (`src/botplatform/profiles.py`): Chrome arguments, dropped Selenium switches and a start-up script that hides automation signals. Each profile is its own registered bot, `arcaptcha-<profile>`, so every run lands in the normal run history, and the history is the evidence. `all-signals` combines the three single-factor profiles and is meant for `headful`. `all-signals-headless` adds a normal user agent and screen size, and is meant for `headless`.
+
+Live results, first `create` answer of each run (one IP, 2026-11-04, from [evidence/bonus/README.md](evidence/bonus/README.md)):
+
+| Bot | Mode | First `create` answer |
+|---|---|---|
+| `arcaptcha` (baseline) | headful and headless | `block` in 15 of 15 runs (7 headful, 8 headless) |
+| `arcaptcha-stealth-flags`, `-no-cdc`, `-webgl-fix` | both | `block` in every run |
+| `arcaptcha-all-signals` | headful | `puzzle` in 11 of 11 runs |
+| `arcaptcha-all-signals-headless` | headless | `puzzle` in 10 of 10 runs |
+
+Limits, stated plainly:
+
+- One IP, one day and small counts. The repeat batches were run in blocks and not interleaved with other profiles. Results depend on the IP and the day, and may differ for you.
+- Nothing in this repo solves the slider. A run that gets a puzzle still ends `blocked` with reason `challenge_unsolved`, never `success`. The approach reduces blocking, it does not solve the CAPTCHA.
+- A `blocked` or unsolved run is a failed run in the history. No success rate is claimed for the required workflow.
+
+### Reproducing the measurement
+
+```
+docker compose run --rm -T web python -m botplatform.batch --profiles all-signals --modes headful --runs 10 --stop-after 0 --pause 5 --jitter 3
+```
+
+The worker must be running. The batch queues runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`), then a summary per bot and mode. Each run takes about 15 seconds. It talks to the live demo site, so it is not part of the tests.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--profiles` | all profiles | Comma separated profile names. |
+| `--modes` | `headless,headful` | Comma separated modes. |
+| `--runs` | 10 | Runs per profile and mode. |
+| `--pause`, `--jitter` | 10, 5 | Seconds between runs, plus a random 0 to `jitter` seconds. |
+| `--run-timeout` | 240 | Seconds to wait for one run. |
+| `--stop-after` | 5 | Skip the rest of a bot and mode after this many `blocked` runs in a row. 0 never stops. |
+| `--seed` | random | Shuffle seed, to repeat an order. |
+
+Then open `/bonus` (or `/bonus.md`, add `?bot=arcaptcha-all-signals` or `?since=2026-11-04T09:00` to filter). Each row is a bot and mode: the outcomes, the `create` types, the not-blocked count with a 95% Wilson interval, and how many runs got a `challenge_id`. Runs where someone opened the live viewer are left out of the rates and counted in "Excluded".
+
+### The assisted bot
+
+`arcaptcha-assisted` is a diagnostic, `headful` only. It asks whether the site accepts a correct slider answer from this browser, by letting a person solve the slider:
+
+1. Launch `arcaptcha-assisted` from `/bots`.
+2. Open the run page and click "Watch live" within about 2 minutes (the bot waits about 130 seconds for the puzzle to be solved).
+3. Drag the slider in the live viewer.
+4. The bot sees the accepted answer and logs in.
+
+Status `success` with reason `human_solved` means a person solved the puzzle. It is not a bot success. Result: 7 of 7 correct answers were accepted, each with a verified login. The evidence is in [evidence/bonus/assisted/](evidence/bonus/assisted/README.md).
 
 ## Scaling
 
@@ -137,11 +188,13 @@ class HelloBot(Bot):
         return BotResult(status=Status.SUCCESS)  # or e.g. Status.FAILED, reason="my_reason"
 ```
 
-Then register it in the explicit list in `src/botplatform/bots/__init__.py`:
+Then register it in the explicit list in `src/botplatform/bots/__init__.py`. Append new bots at the **end** of `BOTS`: the list order is the order bots were added, and the UI shows the newest (last) first.
 
 ```python
-BOTS: list[type[Bot]] = [ExampleBot, ArcaptchaBot, HelloBot]
+BOTS: list[type[Bot]] = [ExampleBot, ArcaptchaBot, ..., ArcaptchaAssistedBot, HelloBot]
 ```
+
+A browser variant of the ARCaptcha bot needs no new class: it is one entry in `PROFILES` in `src/botplatform/profiles.py`, which registers a bot `arcaptcha-<name>`.
 
 The worker checks the list at startup (unique `id`, non-empty `name` and `modes`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
 
