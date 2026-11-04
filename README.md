@@ -64,7 +64,7 @@ To check that the worker image brings up the display and viewer, run `tests/chec
 docker compose up -d --scale worker=3
 ```
 
-Each worker runs one bot at a time and claims runs from the database queue, so no two workers take the same run. A worker holds a lease on its run and renews it. If a worker dies, its run is reaped and marked as failed. A run is stopped and marked `timeout` after `RUN_TIME_LIMIT_SECONDS` (180 by default, set in `.env`).
+Each worker runs one bot at a time and claims runs from the database queue, so no two workers take the same run. A worker holds a lease on its run and renews it. If a worker dies, its run is reaped and marked `error` (`worker_lost`). A run is stopped and marked `timeout` after `RUN_TIME_LIMIT_SECONDS` (180 by default, set in `.env`).
 
 ## Tests
 
@@ -85,7 +85,8 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-TEST_OUTPUT_PLACEHOLDER
+=========== 80 passed, 1 deselected, 1 warning in 128.00s (0:02:08) ============
+(the deselected test is the live test)
 ```
 
 ## Adding a bot
