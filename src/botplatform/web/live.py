@@ -6,11 +6,12 @@ import uuid
 import httpx
 import websockets
 from fastapi import APIRouter, HTTPException, Response, WebSocket
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from botplatform.contract import ACTIVE_STATUSES
-from botplatform.db import Run
+from botplatform.db import Run, RunEvent, session_factory
 from botplatform.web.deps import DbSession
 
 VIEWER_PORT = 6080
@@ -85,9 +86,16 @@ async def live_socket(websocket: WebSocket, run_id: uuid.UUID, session: DbSessio
             max_size=None,
         ) as upstream:
             await websocket.accept(subprotocol=upstream.subprotocol)
+            await run_in_threadpool(record_viewer, run_id)
             await pump(websocket, upstream)
     except (OSError, websockets.WebSocketException):
         await websocket.close(code=1011)
+
+
+def record_viewer(run_id: uuid.UUID) -> None:
+    """Note on the run that someone could take part, for the warning on its page."""
+    with session_factory().begin() as session:
+        session.add(RunEvent(run_id=run_id, type="viewer_connected"))
 
 
 async def pump(browser: WebSocket, worker: websockets.ClientConnection) -> None:
