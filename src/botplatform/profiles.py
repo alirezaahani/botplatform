@@ -62,4 +62,16 @@ WEBGL_FIX = Profile(
     args=("--enable-unsafe-swiftshader",),
 )
 
-PROFILES: dict[str, Profile] = {p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX)}
+# Built from the single-factor profiles, so the three stay in sync.
+ALL_SIGNALS = Profile(
+    "all-signals",
+    "Combines stealth-flags, no-cdc and webgl-fix, because in the first live batch each of them "
+    "was blocked while fixing only its own signal. Tests whether the site needs all of them fixed.",
+    args=STEALTH_FLAGS.args + WEBGL_FIX.args,
+    excluded_switches=STEALTH_FLAGS.excluded_switches,
+    init_script=NO_CDC.init_script,
+)
+
+PROFILES: dict[str, Profile] = {
+    p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX, ALL_SIGNALS)
+}

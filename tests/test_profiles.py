@@ -197,3 +197,25 @@ def test_webgl_fix_keeps_the_window_size_settings(fake, display):
         driver.get(fake.url)
         assert driver.execute_script("return screen.width") == 1280
         assert driver.execute_script("return window.outerWidth") >= 1270
+
+
+def test_all_signals_is_the_union_of_the_single_factor_profiles():
+    combined = PROFILES["all-signals"]
+    for name in ("stealth-flags", "no-cdc", "webgl-fix"):
+        single = PROFILES[name]
+        assert set(single.args) <= set(combined.args)
+        assert set(single.excluded_switches) <= set(combined.excluded_switches)
+        assert single.init_script is None or single.init_script == combined.init_script
+
+
+def test_all_signals_headless_hides_webdriver_and_cdc(fake):
+    signals = page_signals(PROFILES["all-signals"], fake)
+    assert signals["webdriver"] is False
+    assert not [name for name in signals["automation_properties"] if "cdc_" in name]
+
+
+def test_all_signals_headful_also_has_webgl(fake, display):
+    signals = page_signals(PROFILES["all-signals"], fake, headless=False)
+    assert signals["webdriver"] is False
+    assert not [name for name in signals["automation_properties"] if "cdc_" in name]
+    assert signals["webgl"]["vendor"] and signals["webgl"]["renderer"]
