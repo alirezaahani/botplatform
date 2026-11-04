@@ -82,9 +82,12 @@ class FakeDemo:
         self.alert_on_click: str | None = None
         self.toast: dict[str, Any] = {"none": False, "kind": None, "text": None}
         self.creates: list[Reply] = [create_reply("accept")]  # the last one repeats
+        # What the page's own answer button posts to `answer`. The last reply repeats.
+        self.answers: list[Reply] = [Reply(json={"status": "OK", "accepted": True})]
         self.login = Reply(status=200, json={"msg": "You are logged in successfully!"})
         # What the tests inspect
         self.create_requests = 0
+        self.answer_requests: list[dict[str, Any]] = []
         self.logins: list[dict[str, Any]] = []
         self._release = threading.Event()  # set on teardown, to free every hanging request
 
@@ -169,6 +172,12 @@ class FakeDemo:
         async def create() -> Response:
             reply = self.creates[min(self.create_requests, len(self.creates) - 1)]
             self.create_requests += 1
+            return await self._respond(reply, obfuscate=True)
+
+        @app.post("/arcaptcha/api/answer")
+        async def answer(request: Request) -> Response:
+            self.answer_requests.append(await request.json())
+            reply = self.answers[min(len(self.answer_requests), len(self.answers)) - 1]
             return await self._respond(reply, obfuscate=True)
 
         return app

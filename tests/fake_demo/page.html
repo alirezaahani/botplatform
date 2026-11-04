@@ -52,12 +52,37 @@
       document.getElementById('widget-message').appendChild(el);
     }
 
+    // There is no real slider: the "solve" button stands in for a person finishing the puzzle.
     function showPopup(text) {
+      const old = document.getElementById('challenge');
+      if (old) old.remove();
       const popup = document.createElement('div');
       popup.id = 'challenge';
       popup.style.cssText = 'width:300px;height:150px;border:1px solid #999';
       popup.textContent = text;
+      if (text === 'puzzle') {
+        const solve = document.createElement('button');
+        solve.id = 'solve';
+        solve.type = 'button';
+        solve.dataset.cid = challengeId;
+        solve.textContent = 'solve';
+        solve.addEventListener('click', sendAnswer);
+        popup.appendChild(solve);
+      }
       document.body.appendChild(popup);
+    }
+
+    function sendAnswer() {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', CONFIG.api_origin + '/arcaptcha/api/answer');
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.responseType = 'arraybuffer';
+      xhr.onload = () => {
+        let data = {};
+        try { data = decode(xhr.response); } catch (error) { /* unreadable: the page stays put */ }
+        if (data.accepted === false) sendCreate();  // a rejected answer brings a new puzzle
+      };
+      xhr.send(JSON.stringify({challenge_id: challengeId, answer: 42}));
     }
 
     function handleCreate(status, buffer) {
