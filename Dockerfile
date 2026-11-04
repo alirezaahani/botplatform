@@ -51,6 +51,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -m 1777 /tmp/.X11-unix
+ENV DISPLAY=:99
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra worker --no-install-project
