@@ -26,8 +26,10 @@ ASSISTED = replace(FAST, person_wait=15, answer_settle=1.0)
 class Person:
     """Clicks the fake page's "solve" button for each new puzzle, like someone using the viewer."""
 
-    def __init__(self, solves: int) -> None:
+    def __init__(self, solves: int, delay: float = 0) -> None:
         self.solves = solves
+        self.delay = delay  # seconds a puzzle is on screen before the click, like a real person
+        self.seen: dict[str, float] = {}
         self.drivers: list = []
         self.clicked: list[str] = []
         self._stop = threading.Event()
@@ -40,7 +42,9 @@ class Person:
                 cid = self.drivers[0].execute_script(
                     "const b = document.getElementById('solve'); return b ? b.dataset.cid : null"
                 )
-                if cid and cid not in self.clicked:
+                if cid:
+                    self.seen.setdefault(cid, time.monotonic())
+                if cid and cid not in self.clicked and time.monotonic() - self.seen[cid] >= self.delay:
                     self.drivers[0].execute_script("document.getElementById('solve').click()")
                     self.clicked.append(cid)
             except Exception:  # noqa: BLE001 - the page may be loading or Chrome already closed
@@ -56,12 +60,12 @@ class Person:
 
 
 @pytest.fixture
-def person(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[int], Person]]:
+def person(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., Person]]:
     people: list[Person] = []
     real_chrome = chrome
 
-    def make(solves: int) -> Person:
-        someone = Person(solves)
+    def make(solves: int, delay: float = 0) -> Person:
+        someone = Person(solves, delay)
         people.append(someone)
 
         @contextmanager

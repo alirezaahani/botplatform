@@ -45,7 +45,7 @@ def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
 def test_a_second_puzzle_after_a_rejected_answer_is_number_two(fake, assisted, person):  # noqa: F811
     fake.creates = [create_reply("puzzle"), create_reply("puzzle", challenge_id=SECOND_ID)]
     fake.answers = [REJECTED, ACCEPTED]
-    person(2)
+    person(2, delay=1.0)  # a real person is slower than a poll, so each puzzle is captured first
     result, ctx = assisted()
 
     assert (result.status, result.reason) == (Status.SUCCESS, "human_solved")
