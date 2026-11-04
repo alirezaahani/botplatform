@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from botplatform.bots import BOTS
-from botplatform.bots.arcaptcha import ArcaptchaBot, ArcaptchaDragProbeBot, Scenario
+from botplatform.bots.arcaptcha import SOLVER_BOTS, ArcaptchaBot, ArcaptchaDragProbeBot, Scenario
 from botplatform.contract import Status
 from botplatform.profiles import ALL_SIGNALS
 from tests.conftest import FAST, RecordingContext, assert_no_password
@@ -153,7 +153,7 @@ def test_the_normal_bot_never_drags(probe):
 
 def test_the_probe_bot_is_registered_headful_with_an_honest_description():
     assert ArcaptchaDragProbeBot in BOTS
-    assert BOTS.index(ArcaptchaDragProbeBot) == len(BOTS) - 3  # the solver bots follow it
+    assert BOTS.index(ArcaptchaDragProbeBot) == len(BOTS) - len(SOLVER_BOTS) - 1  # solvers follow
     assert ArcaptchaDragProbeBot.id == "arcaptcha-drag-probe"
     assert ArcaptchaDragProbeBot.modes == ["headful"]
     assert ArcaptchaDragProbeBot.profile is ALL_SIGNALS
