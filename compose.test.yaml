@@ -1,4 +1,4 @@
-# Bot tests: `docker compose -f compose.test.yaml run --rm tests`
+# Bot tests: `docker compose -f compose.test.yaml run --rm --build tests`
 # Own project name, so it can never touch the main stack's containers or database volume.
 # It needs no .env. The web tests use the throwaway database below, which has no volume.
 name: botplatform-test

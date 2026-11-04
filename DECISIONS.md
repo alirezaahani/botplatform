@@ -310,7 +310,7 @@ Tests use the worker image and a real Postgres, through one Compose command.
 
 **Why:** reviewers need only Docker, the tests use the browser we ship, and `SKIP LOCKED` is tested for real.
 
-Tests use their own file, `compose.test.yaml`: `docker compose -f compose.test.yaml run --rm tests`. It has its own project name, `botplatform-test`, so it cannot touch the main stack's containers or database volume. It needs no `.env`. It starts a throwaway Postgres (no volume) for the web tests, and the tests create the tables with `create_all`. The `test` image stage reuses the worker's Chrome and system layers and adds pytest and FastAPI, so production images gain neither. Live tests are off by default: `... run --rm tests pytest -m live -v -s`.
+Tests use their own file, `compose.test.yaml`: `docker compose -f compose.test.yaml run --rm --build tests` (`--build` matters: the tests are copied into the image, so without it an old image runs old tests). It has its own project name, `botplatform-test`, so it cannot touch the main stack's containers or database volume. It needs no `.env`. It starts a throwaway Postgres (no volume) for the web tests, and the tests create the tables with `create_all`. The `test` image stage reuses the worker's Chrome and system layers and adds pytest and FastAPI, so production images gain neither. Live tests are off by default: `... run --rm --build tests pytest -m live -v -s`.
 
 **Cost we accept:** tests run more slowly during development.
 
@@ -365,7 +365,7 @@ Measured on 2026-11-04, one host, Chrome 156:
 
 | Check | Result |
 |---|---|
-| Full test suite in Docker (`compose.test.yaml`) | 64 passed (1 live test deselected), 103s |
+| Full test suite in Docker (`compose.test.yaml`) | 65 passed (1 live test deselected), 92s |
 | `tests/check_viewer.sh` on the worker image | Xvfb `:99`, x11vnc on 5900 and noVNC on 6080 all up |
 | Headful ARCaptcha run through the stack | ran on Xvfb and ended `blocked` / `captcha_blocked`, like headless |
 | `/runs/{id}/live` while the run was active | redirected to noVNC, which came through the proxy; the WebSocket proxy gave the RFB handshake (`RFB 003.008`) |
