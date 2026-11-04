@@ -486,6 +486,35 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Not verified:** nothing has run on the live site. The fake demo accepts an answer equal to a known target, so tests show our own logic, not that the real site accepts these paths.
 
+### Solver: the silhouette finder and the 2x2 comparison
+
+**What:** a second finder, `silhouette` (`botplatform/solver/silhouette.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
+
+**Method:** one-dimensional silhouette matching. The piece's row (`piece_top`) and exact shape (its alpha channel, pixels above 128) are known, so only x is unknown. For each x in 0..196 the score is the mean brightness of a thin ring (about 2 px) just outside the silhouette, minus the mean brightness inside it, using `cv2.matchTemplate` on the grayscale strip of the background. The answer is the best x. It raises `GapNotFound` if the best score is under 40 gray levels or does not beat every x at least 8 px away by 20. About 60 lines, OpenCV and numpy only, bytes in memory.
+
+**Why it is a useful comparison:** it is an independent method. It does not use `find_piece_mask` or `extract_geometry`, so it does not depend on the halo detector or on the "body square minus 10" rule. It needs no reference data. It uses the piece image, which the `cv` finder ignores. If the two finders agree on a puzzle that is good evidence for both; if they disagree, the live result shows which one the site accepts.
+
+**Choice of score:** four simple scores were tried on the 8 fixtures before any bot was registered: edge strength along the outline, ring minus inside, a wider ring minus inside, and ring minus wider ring. The first two were exact on 8 of 8 (the others were off by up to 2 px). Ring minus inside was kept because it follows what the gap looks like (light halo, dark interior). No tuning beyond that.
+
+**Offline comparison with the fixtures** (`cv_target` is the other finder's answer; "score" is the best ring-minus-inside, "lead" is its margin over the best x at least 8 px away):
+
+| fixture | silhouette | cv_target | human | diff cv | diff human | score | lead |
+|---|---|---|---|---|---|---|---|
+| 578370f1 | 60 | 60 | 58 | 0 | +2 | 133.5 | 96.8 |
+| 6c3cc0fd | 90 | 90 | 90 | 0 | 0 | 138.2 | 81.9 |
+| 75d5e12d | 100 | 100 | 101 | 0 | -1 | 119.1 | 93.2 |
+| c11962fb | 130 | 130 | 131 | 0 | -1 | 131.9 | 101.1 |
+| c5dc69eb | 170 | 170 | 166 | 0 | +4 | 151.0 | 105.8 |
+| de3139ec | 170 | 170 | 169 | 0 | +1 | 152.4 | 104.4 |
+| f0af6952 | 100 | 100 | 101 | 0 | -1 | 161.3 | 100.9 |
+| f667f20b | 130 | 130 | 128 | 0 | +2 | 136.1 | 85.6 |
+
+Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv_target 8 of 8, within 9 px 8 of 8. Against the human answers the largest difference is 4 px. Both background types are among the fixtures and neither failed. The thresholds sit far from both sides: real puzzles scored 119..161 with a lead of 82..106, while blank, smooth, gradient and random-noise backgrounds scored at most 7.2 with a lead under 0.5.
+
+**Known limits:** the fixtures are only 8 puzzles, and the `cv_target` is the other finder's answer, not the site's, so agreement shows consistency, not correctness. The method relies on the halo being brighter than the gap interior; a background with a very bright interior, or a gap whose halo is lost in a bright area, could fail or pick another place, and it would then rather answer wrongly with a high score than raise. It needs the piece's row and alpha to be right (a piece with no alpha or a row outside the image raises `GapNotFound`). The accepted tolerance of the site is under 10 px; this finder is exact on the fixtures, but that is the same data the method was chosen on.
+
+**Not verified:** nothing has run on the live site. The fake demo only checks that the answer equals a known target for one fixture.
+
 ## Platform support
 
 amd64 only. ARM64 was not considered, and the README states this limitation.

@@ -43,6 +43,8 @@ Not verified against the real site: the selectors `div.draggable` and `img.puzzl
 
 ## Reading `solve_attempt` events (`arcaptcha-solver-<finder>-<mover>`)
 
+The four solver bots are `arcaptcha-solver-cv-linear`, `arcaptcha-solver-cv-eased`, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (finder x movement). The `finder` field of `solve_attempt` says which finder gave the target.
+
 The automatic solver records `solve_started` (finder, mover, attempt cap, stuck retries, `puzzle_ready`), one `solve_attempt` per answer it makes, and `solve_finished` (`reason`: `solved`, `solve_failed`, `gap_not_found`, `not_a_puzzle`, or a step name such as `puzzle_ready` when it timed out).
 
 A `solve_attempt` has:
