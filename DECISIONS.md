@@ -310,7 +310,7 @@ Tests use the worker image and a real Postgres, through one Compose command.
 
 **Why:** reviewers need only Docker, the tests use the browser we ship, and `SKIP LOCKED` is tested for real.
 
-Bot tests use their own file, `compose.test.yaml`: `docker compose -f compose.test.yaml run --rm tests`. It has its own project name, `botplatform-test`, so it cannot touch the main stack's containers or database volume. It needs no `.env`, and bot tests need no database. The `test` image stage reuses the worker's Chrome and system layers and adds pytest and FastAPI, so production images gain neither. Live tests are off by default: `... run --rm tests pytest -m live -v -s`.
+Tests use their own file, `compose.test.yaml`: `docker compose -f compose.test.yaml run --rm tests`. It has its own project name, `botplatform-test`, so it cannot touch the main stack's containers or database volume. It needs no `.env`. It starts a throwaway Postgres (no volume) for the web tests, and the tests create the tables with `create_all`. The `test` image stage reuses the worker's Chrome and system layers and adds pytest and FastAPI, so production images gain neither. Live tests are off by default: `... run --rm tests pytest -m live -v -s`.
 
 **Cost we accept:** tests run more slowly during development.
 
@@ -356,6 +356,32 @@ Ten headless runs from Docker on 2026-11-03, using plain Chrome for Testing with
 - The cause of the block is unknown, because the server makes the decision.
 - All runs came from one machine and one IP, and headful has not been measured from Docker.
 - These outcomes have not occurred on the live site: `success`, a green toast, a puzzle, `accept`, a JS alert, a timeout, `missing_challenge_id` and `unknown_captcha_type`. The fake demo page has to cover them, which can only confirm our assumptions about the real success path.
+
+### Step 4 results: live viewing
+
+Built: the worker image runs `worker/start.sh` (Xvfb `:99` at 1280x800x24, x11vnc on localhost, websockify serving noVNC on port 6080, then the worker). If any of them dies, the script exits non-zero and Docker restarts the container. The `arcaptcha` bot now declares `headless` and `headful`. Web proxies `/runs/{id}/live` (static files and the WebSocket) to the run's worker, adds a `viewer_connected` event per connection, and the run page shows a "Watch live" link and the human-assisted warning.
+
+Measured on 2026-11-04, one host, Chrome 156:
+
+| Check | Result |
+|---|---|
+| Full test suite in Docker (`compose.test.yaml`) | 64 passed (1 live test deselected), 103s |
+| `tests/check_viewer.sh` on the worker image | Xvfb `:99`, x11vnc on 5900 and noVNC on 6080 all up |
+| Headful ARCaptcha run through the stack | ran on Xvfb and ended `blocked` / `captcha_blocked`, like headless |
+| `/runs/{id}/live` while the run was active | redirected to noVNC, which came through the proxy; the WebSocket proxy gave the RFB handshake (`RFB 003.008`) |
+| `viewer_connected` and the warning | event written, warning on the run page |
+| Keyboard and mouse focus, no window manager | Chrome had focus (`document.hasFocus()` true) and text sent as VNC key events reached the page. Checked with a scripted RFB client, not by hand in a browser |
+| Kill Xvfb in the worker | container restarted (restart count 1) and the viewer came back |
+| `docker compose up -d --scale worker=2` | web resolved both workers' hostnames and reached both noVNC ports |
+
+**Not verified:** a person using the viewer in a real browser (no browser tool was connected), and a human actually driving a live run, because blocked runs finish within seconds.
+
+**Choices:**
+
+- **No window manager.** Chrome gets keyboard focus without one in the check above. **Why:** one less process to run and fail. **Cost we accept:** no window decorations, and a second Chrome window (a dialog) has no focus handling.
+- **Screen 1280x800.** Chrome is started with the same size and position, so it fills the screen. **Why:** it fits most laptop screens when scaled in the viewer. **Cost we accept:** a fixed size for every headful run.
+- **The worker is found by its container hostname**, which is `runs.worker_id`. **Why:** Compose's DNS already resolves it, with nothing to register. It resolved for both workers when scaled to 2. **Cost we accept:** it depends on Compose networking, and the lookup function (`worker_base_url`) is the one place to change otherwise.
+- **The viewer port has no password.** x11vnc listens on localhost inside the worker, and websockify's port 6080 is not published, so only containers on the Compose network can reach it. **Why:** the only way in from outside is web's port, which binds to `127.0.0.1` (5c). **Cost we accept:** anything else on the Compose network could take control of a run.
 
 ### Bonus: a time-boxed attempt after step 5
 
