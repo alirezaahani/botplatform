@@ -20,8 +20,10 @@ from urllib.parse import urlsplit
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 
+from botplatform.bots import drag_probe
 from botplatform.bots.arcaptcha_codec import decode_body
 from botplatform.bots.selenium_support import (
     CapturedResponse,
@@ -63,6 +65,10 @@ class StepTimeouts:
     answer_settle: float = 3
     # How long a captured puzzle's two images get to load after its `create` arrives.
     puzzle_images: float = 5
+    # Only for the drag probe: the budget for all its attempts (it leaves room in the 180 s run
+    # limit for the page load and the login) and the most attempts it makes.
+    drag_probe: float = 100
+    drag_attempts: int = 8
 
 
 DEFAULT_TIMEOUTS = StepTimeouts()
@@ -257,6 +263,7 @@ class ArcaptchaBot(Bot):
     modes: ClassVar[list[str]] = ["headless", "headful"]
     profile: ClassVar[Profile] = BASELINE
     wait_for_person: ClassVar[bool] = False
+    drag_probe: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -288,6 +295,7 @@ class ArcaptchaBot(Bot):
                     self.timeouts,
                     self.profile,
                     self.wait_for_person,
+                    self.drag_probe,
                 )
                 return scenario.run()
         except Exception:  # noqa: BLE001 - every failure becomes an error result
@@ -315,6 +323,27 @@ class ArcaptchaAssistedBot(ArcaptchaBot):
     modes: ClassVar[list[str]] = ["headful"]
     profile = ALL_SIGNALS
     wait_for_person = True
+
+
+class ArcaptchaDragProbeBot(ArcaptchaBot):
+    """An experiment: how does a synthetic drag of the slider handle move the piece?"""
+
+    id = "arcaptcha-drag-probe"
+    name = "ARCaptcha demo (drag probe experiment)"
+    description = (
+        "An experiment, not a solver. Ticks the checkbox and, when a puzzle appears, drags the "
+        "slider handle by planned distances (alternating Selenium ActionChains and CDP mouse "
+        "events, up to 8 attempts, one per puzzle), sampling the handle and piece positions after "
+        "every step and recording which DOM events the widget receives. It never reads an answer "
+        "to decide anything and never counts as a solve: the run ends as blocked with the reason "
+        "drag_probe_done."
+    )
+    # Headful only, like the assisted bot: ALL_SIGNALS is the profile known to get puzzles there.
+    # `all-signals-headless` exists but has not been shown to get a puzzle, so headless is left out
+    # until a live run shows it does.
+    modes: ClassVar[list[str]] = ["headful"]
+    profile = ALL_SIGNALS
+    drag_probe = True
 
 
 def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
@@ -351,10 +380,13 @@ class Scenario:
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
         profile: Profile = BASELINE,
         wait_for_person: bool = False,
+        drag_probe: bool = False,
     ) -> None:
         self.ctx = ctx
         self.profile = profile
         self.wait_for_person = wait_for_person
+        self.drag_probe = drag_probe
+        self.answer_records: list[dict[str, Any]] = []  # every `answer` exchange, in order
         self.driver = driver
         self.username = username
         self.password = password
@@ -463,6 +495,8 @@ class Scenario:
         unsolved = BotResult(Status.BLOCKED, "challenge_unsolved")
         if self.wait_for_person and result == unsolved and self._types()[-1] == "puzzle":
             return self._wait_for_person()
+        if self.drag_probe and result == unsolved and self._types()[-1] == "puzzle":
+            return self._run_drag_probe()
         return result
 
     def _wait_for_person(self) -> BotResult | None:
@@ -490,6 +524,204 @@ class Scenario:
                 return None
             time.sleep(POLL_SECONDS)
         raise StepTimeout("human_wait_expired")
+
+    def _run_drag_probe(self) -> BotResult:
+        """Drag the handle once per puzzle by planned amounts and record what moves.
+
+        Puzzle n is captured (by `_drain`) before attempt n's drag. The answer is never read to
+        decide anything, except that an accepted one ends the probe (and is only recorded). The
+        run is never a solve: the result is always blocked with the reason `drag_probe_done`.
+        """
+        timeouts = self.timeouts
+        planned = drag_probe.plan(timeouts.drag_attempts)
+        self.ctx.event(
+            "drag_probe_started", {"plan": planned, "seconds": timeouts.drag_probe}
+        )
+        self._screenshot("drag-probe-before")
+        deadline = time.monotonic() + timeouts.drag_probe
+        reason = "plan_finished"
+        failures = quiet = 0
+        for method, dx in planned:
+            if time.monotonic() >= deadline:
+                reason = "budget_spent"
+                break
+            self._do(self._drain)
+            if self.puzzles == 0:
+                reason = "no_puzzle"
+                break
+            n = self.puzzles
+            answers_before = len(self.answer_records)
+            attempt: dict[str, Any] = {
+                "n": n,
+                "challenge_id": self.creates[-1]["challenge_id"],
+                "method": method,
+                "dx": dx,
+                "samples": [],
+                "error": None,
+            }
+            try:
+                self._drag(method, dx, attempt["samples"])
+            except Exception as error:  # noqa: BLE001 - one failed attempt must not stop the probe
+                attempt["error"] = f"{type(error).__name__}: {str(error).splitlines()[0][:200]}"
+                self._release_everything()
+                self.ctx.event(
+                    "drag_probe_failed",
+                    {
+                        "n": n,
+                        "method": method,
+                        "type": type(error).__name__,
+                        "message": str(error).splitlines()[0][:200] if str(error) else "",
+                    },
+                )
+                failures += 1
+            else:
+                failures = 0
+            outcome = self._await_next_puzzle(n, answers_before)
+            attempt["outcome"] = outcome
+            attempt.update(self._final_state())
+            attempt["listener"] = self._read_listener()
+            self.ctx.event("drag_probe_attempt", attempt)
+            if self._accepted_since(answers_before):
+                reason = "answer_accepted"
+                break
+            if failures >= 2:
+                reason = "repeated_failures"
+                break
+            quiet = quiet + 1 if outcome == "no_answer" else 0
+            if quiet >= 2:
+                reason = "no_answer"
+                break
+            if outcome == "no_new_puzzle":
+                reason = "no_new_puzzle"
+                break
+        self.ctx.event("drag_probe_finished", {"reason": reason, "puzzles": self.puzzles})
+        self._screenshot("drag-probe-after")
+        return BotResult(Status.BLOCKED, "drag_probe_done")
+
+    def _drag(self, method: str, dx: int, samples: list[dict[str, Any]]) -> None:
+        """Press the handle, move it `dx` px in steps, release. Sample after every step."""
+        driver = self.driver
+        found = self._wait_for(
+            lambda: driver.find_elements(By.CSS_SELECTOR, drag_probe.HANDLE),
+            self.timeouts.puzzle_images,
+            "drag_handle",
+        )
+        handle = found[0]
+        self._do(lambda: driver.execute_script(drag_probe.INSTALL_LISTENER_JS))
+        self._read_listener()  # start the attempt with an empty summary
+
+        def sample(label: str, moved: int) -> dict[str, Any]:
+            data = self._do(
+                lambda: driver.execute_script(
+                    drag_probe.SAMPLE_JS, drag_probe.HANDLE, drag_probe.PIECE
+                )
+            )
+            data = {"label": label, "moved": moved, **(data or {})}
+            samples.append(data)
+            return data
+
+        start = sample("before", 0)
+        targets = [round(dx * i / drag_probe.STEPS) for i in range(1, drag_probe.STEPS + 1)]
+        if method == "selenium":
+            actions = ActionChains(driver)
+
+            def run() -> None:
+                actions.perform()
+                # Clear only the local queue: clearing the remote end would release the button.
+                for device in actions.w3c_actions.devices:
+                    device.clear_actions()
+
+            actions.move_to_element(handle).click_and_hold()
+            run()
+            sample("pressed", 0)
+            previous = 0
+            for target in targets:
+                actions.move_by_offset(target - previous, 0)
+                run()
+                previous = target
+                time.sleep(drag_probe.STEP_PAUSE)
+                sample("step", target)
+            actions.release()
+            run()
+        elif method == "cdp":
+            rect = (start.get("handle") or {}).get("rect")
+            if not rect:
+                raise RuntimeError("no handle rect")
+            x = rect["x"] + rect["width"] / 2
+            y = rect["y"] + rect["height"] / 2
+
+            def mouse(kind: str, at: float, **extra: Any) -> None:
+                driver.execute_cdp_cmd(
+                    "Input.dispatchMouseEvent",
+                    {"type": kind, "x": at, "y": y, "button": "left", **extra},
+                )
+
+            mouse("mouseMoved", x, button="none", buttons=0)
+            mouse("mousePressed", x, buttons=1, clickCount=1)
+            sample("pressed", 0)
+            for target in targets:
+                mouse("mouseMoved", x + target, buttons=1)
+                time.sleep(drag_probe.STEP_PAUSE)
+                sample("step", target)
+            mouse("mouseReleased", x + dx, buttons=0, clickCount=1)
+        else:
+            raise ValueError(f"unknown drag method {method!r}")
+        time.sleep(drag_probe.STEP_PAUSE)
+        sample("released", dx)
+
+    def _release_everything(self) -> None:
+        """After a failed drag, let go of the mouse so the next attempt starts clean."""
+        try:
+            ActionChains(self.driver).reset_actions()
+            self.driver.execute_cdp_cmd(
+                "Input.dispatchMouseEvent",
+                {"type": "mouseReleased", "x": 0, "y": 0, "button": "left", "clickCount": 1},
+            )
+        except Exception:  # noqa: BLE001 - best effort only
+            pass
+
+    def _await_next_puzzle(self, n: int, answers_before: int) -> str:
+        """Drain until the answer and then the next puzzle's capture arrive (or time runs out)."""
+        settle = self.timeouts.answer_settle
+        deadline = time.monotonic() + settle
+        while len(self.answer_records) == answers_before:
+            if time.monotonic() >= deadline:
+                return "no_answer"
+            self._do(self._drain)
+            time.sleep(POLL_SECONDS)
+        deadline = time.monotonic() + settle
+        while self.puzzles == n:
+            if time.monotonic() >= deadline:
+                return "no_new_puzzle"
+            self._do(self._drain)
+            time.sleep(POLL_SECONDS)
+        return "next_puzzle"
+
+    def _accepted_since(self, answers_before: int) -> bool:
+        """True if a new answer says `success: true`. Only used to stop; it is recorded anyway."""
+        for record in self.answer_records[answers_before:]:
+            response = record.get("response")
+            if isinstance(response, dict) and response.get("success") is True:
+                return True
+        return False
+
+    def _final_state(self) -> dict[str, Any]:
+        """The handle and piece after the answer, which is where the widget leaves them."""
+        try:
+            state = self._do(
+                lambda: self.driver.execute_script(
+                    drag_probe.SAMPLE_JS, drag_probe.HANDLE, drag_probe.PIECE
+                )
+            )
+        except Exception as error:  # noqa: BLE001 - evidence gathering must not change the run
+            return {"after_outcome_error": type(error).__name__}
+        return {"after_outcome": state}
+
+    def _read_listener(self) -> Any:
+        try:
+            return self._do(lambda: self.driver.execute_script(drag_probe.READ_LISTENER_JS))
+        except Exception as error:  # noqa: BLE001 - evidence gathering must not change the run
+            return {"error": type(error).__name__}
 
     def _log_in(self) -> BotResult | None:
         """Submit the form. Return a failure if the result is not confirmed by both signals."""
@@ -569,7 +801,9 @@ class Scenario:
                 self.logins.append(response)
             elif response.name == "answer":
                 self.answered_at = time.monotonic()
-                self.ctx.event("answer_request", self._exchange_record(response))
+                record = self._exchange_record(response)
+                self.answer_records.append(record)
+                self.ctx.event("answer_request", record)
             else:
                 self._handle_create(response)
                 seen_create = True
