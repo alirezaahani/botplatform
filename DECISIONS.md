@@ -155,7 +155,19 @@ This applies to runs already classified as failed, blocked, or `error` with `cre
 Each run happens in a child process. At the time limit, the worker kills the whole process group, including Chrome, and marks the run `timeout`. Scaling means `docker compose up --scale worker=N`, with one worker as the default.
 
 - **Claiming:** workers take runs with `SELECT ... FOR UPDATE SKIP LOCKED`, so two workers cannot claim the same run.
-- **Crash recovery:** a worker renews a lease on its run every few seconds, and any worker can mark a run with an expired lease as `error`.
+- **Crash recovery:** a worker renews a lease on its run every 5 seconds (`lease_renew_seconds`), and the lease lasts 30 seconds (`lease_seconds`). Before each claim, every worker marks runs with an expired lease as `error` with reason `worker_lost`, so no leader or separate reaper is needed. The database clock decides expiry, so container clock differences do not matter. A false reap needs six missed renewals in a row.
+- **Renewal without a thread:** the worker waits for the child in 5-second slices and renews in each slice. If a renewal finds the run no longer its own (another worker reaped it), the worker kills the child's process group.
+- **Graceful stop:** on `SIGTERM` the worker kills the child's process group and marks the run `error` with reason `worker_stopped`.
+- **No automatic retry:** a lost run is `error`, not re-queued, because a run logs in on a real site and a repeat could duplicate that side effect.
+
+**Evidence (2026-11-04, `--scale worker=2`, real runs started from the UI):** `docker kill` of the worker that held a run: the other worker marked it `error`/`worker_lost` 25 seconds later. `docker stop` of the holder: the run became `error`/`worker_stopped` within 5 seconds. Both showed correctly on the run page and in the history. Platform tests (`tests/test_queue.py`, `tests/test_worker.py`) cover claim order, concurrent claims with no duplicate, lease renewal and reaping, the time limit killing a grandchild process, a child that exits with no result, and `SIGTERM`.
+
+**Cost we accept:**
+
+- A worker busy with a run does not reap, so a lost run waits until some worker is idle. With one worker, recovery happens after it restarts.
+- A `SIGTERM` between claiming and starting the child leaves the run `running` until the lease expires, then `worker_lost`.
+- `lease_expires_at` keeps its last value after a run ends. Only `running` rows are checked, so it has no effect.
+- A database outage during renewal stops the worker, and Compose restarts it.
 
 **Why:**
 
