@@ -14,7 +14,6 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha_codec import decode_body
-from botplatform.profiles import BASELINE, PROFILES, Profile, bot_id
 from botplatform.bots.selenium_support import (
     CapturedResponse,
     ResponseWatcher,
@@ -22,6 +21,7 @@ from botplatform.bots.selenium_support import (
     chrome,
 )
 from botplatform.contract import Bot, BotResult, RunContext, Status
+from botplatform.profiles import BASELINE, PROFILES, Profile, bot_id
 
 DEMO_URL = "https://demo.arcaptcha.co/"
 CHECKBOX = "#input-checkbox"
@@ -239,9 +239,11 @@ class Scenario:
             {
                 "create": lambda url: url.split("?")[0].endswith("/api/create"),
                 "login": lambda url: url.split("?")[0].endswith("/api/login"),
+                "answer": lambda url: url.split("?")[0].endswith("/arcaptcha/api/answer"),
             },
-            # Only `create`: its request carries the browser signals. Login holds the password.
-            capture_requests=frozenset({"create"}),
+            # Not `login`, which holds the password. `create` carries the browser signals, and
+            # `answer` is kept because nobody has seen a decoded one yet.
+            capture_requests=frozenset({"create", "answer"}),
         )
         self.creates: list[dict[str, Any]] = []
         self.logins: list[CapturedResponse] = []
@@ -400,6 +402,8 @@ class Scenario:
         for response in self.watcher.poll():
             if response.name == "login":
                 self.logins.append(response)
+            elif response.name == "answer":
+                self.ctx.event("answer_request", self._exchange_record(response))
             else:
                 self._handle_create(response)
                 seen_create = True
@@ -419,7 +423,7 @@ class Scenario:
                 info["decode_error"] = type(error).__name__
         if not isinstance(challenge_id, str) or not challenge_id:
             challenge_id = None
-        self.ctx.event("create_request", self._create_request_record(response))
+        self.ctx.event("create_request", self._exchange_record(response))
         self.creates.append({"captcha_type": info["captcha_type"], "challenge_id": challenge_id})
         info["has_challenge_id"] = challenge_id is not None
         if challenge_id:
@@ -434,8 +438,8 @@ class Scenario:
         self.ctx.event("browser_signals", signals if isinstance(signals, dict) else {})
 
     @staticmethod
-    def _create_request_record(response: CapturedResponse) -> dict[str, Any]:
-        """The decoded `create` request (it holds the browser signals sent) and response."""
+    def _exchange_record(response: CapturedResponse) -> dict[str, Any]:
+        """A decoded request and response. The `create` request holds the browser signals sent."""
         record: dict[str, Any] = {"http_status": response.status}
         for side, data, error in (
             ("request", response.request_body, response.request_body_error),

@@ -99,7 +99,7 @@ def test_run_records_profile_signals_and_create_request(fake, credentials, profi
 
 def test_undecodable_request_body_is_noted_not_fatal():
     garbage = CapturedResponse("create", "u", 201, b'{"captcha_type":"accept"}', None, b"\x01\x02")
-    record = arcaptcha.Scenario._create_request_record(garbage)
+    record = arcaptcha.Scenario._exchange_record(garbage)
     assert record["request"] is None
     assert record["request_note"].startswith("decode failed")
     assert record["request_raw_length"] == 2
@@ -107,7 +107,7 @@ def test_undecodable_request_body_is_noted_not_fatal():
 
 
 def test_missing_request_body_is_noted():
-    record = arcaptcha.Scenario._create_request_record(
+    record = arcaptcha.Scenario._exchange_record(
         CapturedResponse("create", "u", 201, b"{}", None, None, "WebDriverException: gone")
     )
     assert record["request"] is None
