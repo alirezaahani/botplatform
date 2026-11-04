@@ -143,13 +143,13 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-=========== 80 passed, 1 deselected, 1 warning in 128.00s (0:02:08) ============
+=========== 146 passed, 1 deselected, 1 warning in 207.44s (0:03:27) ===========
 (the deselected test is the live test)
 ```
 
 ### What the tests cover
 
-Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases are in the other files. Each row lists the status and reason that the test asserts.
+Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases are in the other files. The bonus work adds the rows at the end of the table. Each row lists the status and reason that the test asserts.
 
 | Case | Test | Result |
 |---|---|---|
@@ -166,6 +166,12 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases 
 | Leases and reaping | `test_renew_extends_the_lease`, `test_reap_expired_marks_only_expired_running_runs`, `test_a_late_finish_after_reaping_changes_nothing` in `tests/test_queue.py`; `test_the_lease_is_renewed_while_the_child_runs`, `test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status` in `tests/test_worker.py` | `error`, `worker_lost` |
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
+| Browser profiles | `tests/test_profiles.py` (26 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; every profile has a registered bot; the run records the profile, the browser signals and the decoded `create` request | profile and recording rules |
+| Batch runner | `tests/test_batch.py` (13 tests): plan size and seeded shuffle, pause and jitter, the early stop, Ctrl-C, a run that never finishes, and a batch against the real queue with a stand-in worker | batch output and stop rules |
+| Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
+| Bonus report | `tests/test_bonus.py` (6 tests): per bot and mode counts, the first `create` answer only, viewer runs excluded, `?since=` and `?bot=`, `/bonus.md` header, empty history | rates and filters |
+| Assisted bot | `tests/test_assisted.py` (11 tests): a solved puzzle then a verified login is `success`, `human_solved`; a rejected answer brings a second puzzle; nobody answering is a timeout; a failed login after a solve is `verification_failed`; it is registered `headful` only | `success`, `human_solved` and the failure cases |
+| Newest first | `tests/test_order.py` (4 tests): the `BOTS` order, `publish` sets and updates `position`, the Bots page and the Bonus report list the newest bot first | page and report order |
 
 ## Adding a bot
 

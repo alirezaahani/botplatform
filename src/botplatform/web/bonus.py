@@ -69,15 +69,19 @@ def _first_event(field_name: str):
 
 def collect(session: Session, since: datetime | None, bot: str | None) -> list[Row]:
     viewed = exists().where(RunEvent.run_id == Run.id, RunEvent.type == "viewer_connected")
-    query = select(
-        Run.bot_id,
-        Run.mode,
-        Run.status,
-        Run.reason,
-        Run.challenge_id,
-        _first_event("captcha_type"),
-        viewed,
-    ).select_from(Run).join(BotRecord, BotRecord.id == Run.bot_id)
+    query = (
+        select(
+            Run.bot_id,
+            Run.mode,
+            Run.status,
+            Run.reason,
+            Run.challenge_id,
+            _first_event("captcha_type"),
+            viewed,
+        )
+        .select_from(Run)
+        .join(BotRecord, BotRecord.id == Run.bot_id)
+    )
     # Newest bot first, like the Bots page. Alphabetically headful sorts first, so headless
     # before headful needs the explicit case.
     query = query.order_by(
