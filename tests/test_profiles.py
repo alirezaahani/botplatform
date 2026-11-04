@@ -36,10 +36,10 @@ def test_init_script_runs_before_page_scripts(fake):
 
 
 def test_extra_args_apply(fake):
-    profile = Profile("t", "t", args=("--lang=fa-IR",))
+    profile = Profile("t", "t", args=("--user-agent=ProbeAgent/1",))
     with chrome(headless=True, profile=profile) as driver:
         driver.get(fake.url)
-        assert driver.execute_script("return navigator.language") == "fa-IR"
+        assert driver.execute_script("return navigator.userAgent") == "ProbeAgent/1"
 
 
 def test_stealth_flags_hide_navigator_webdriver_and_baseline_does_not(fake):
