@@ -48,6 +48,8 @@ services:
     environment:
       <<: *database-env
       RUN_TIME_LIMIT_SECONDS: ${RUN_TIME_LIMIT_SECONDS:-180}
+      LEASE_SECONDS: ${LEASE_SECONDS:-30}
+      LEASE_RENEW_SECONDS: ${LEASE_RENEW_SECONDS:-5}
       ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME:?set it in .env}
       ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD:?set it in .env}
     shm_size: 1gb
