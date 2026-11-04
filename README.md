@@ -96,6 +96,26 @@ Real output of the test command:
 (the deselected test is the live test)
 ```
 
+### What the tests cover
+
+Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases are in the other files. Each row lists the status and reason that the test asserts.
+
+| Case | Test | Result |
+|---|---|---|
+| Main success workflow | `test_accepted_checkbox_then_confirmed_login_succeeds` (types `accept` and `cookie`), `test_softban_with_confirmed_login_succeeds` | `success` |
+| Missing `challenge_id` | `test_accept_without_id_fails` | `failed`, `missing_challenge_id` |
+| CAPTCHA blocking | `test_block_with_id_records_the_id_and_still_logs_in`, `test_block_without_id`, `test_successful_login_never_upgrades_a_block` | `blocked`, `captcha_blocked` |
+| Puzzle or unsolved challenge | `test_challenges_are_blocked_as_unsolved` | `blocked`, `challenge_unsolved` |
+| Step timeouts | `test_page_load_hang`, `test_checkbox_missing`, `test_create_hang`, `test_login_response_hang` | `timeout`, reason is the step: `load_page`, `find_checkbox`, `create_response`, `login_response` |
+| Whole-run timeout | `test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit` in `tests/test_worker.py` | `timeout`, `run_time_limit` |
+| Unsuccessful form verification | `test_softban_with_rejected_login_fails_verification`, `test_login_not_confirmed_by_both_signals_fails` | `failed`, `verification_failed` |
+| Dropped connections | `test_create_connection_dropped_is_an_error_straight_away`, `test_login_connection_dropped_is_an_error`, `test_create_api_origin_refuses_connections` | `error`, `create_request_failed` or `login_request_failed` |
+| Dropped login after a block | `test_blocked_run_whose_login_is_dropped_stays_blocked`, `test_blocked_run_whose_login_hangs_stays_blocked` | `blocked`, `captcha_blocked` |
+| Queue claim | `test_claim_is_fifo`, `test_claim_marks_the_run_running_with_a_lease`, `test_concurrent_claims_never_duplicate_or_lose_a_run` in `tests/test_queue.py` | one claim per run |
+| Leases and reaping | `test_renew_extends_the_lease`, `test_reap_expired_marks_only_expired_running_runs`, `test_a_late_finish_after_reaping_changes_nothing` in `tests/test_queue.py`; `test_the_lease_is_renewed_while_the_child_runs`, `test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status` in `tests/test_worker.py` | `error`, `worker_lost` |
+| Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
+| Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
+
 ## Adding a bot
 
 A bot is a class that implements the contract in `src/botplatform/contract.py`:
