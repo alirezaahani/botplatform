@@ -40,3 +40,19 @@ How to read it:
 - Trusted: `isTrusted` false for an event type means the browser marked it synthetic. CDP and WebDriver input normally give true.
 
 Not verified against the real site: the selectors `div.draggable` and `img.puzzle`, and whether either method moves the real handle.
+
+## Reading `solve_attempt` events (`arcaptcha-solver-<finder>-<mover>`)
+
+The automatic solver records `solve_started` (finder, mover, attempt cap, stuck retries, `puzzle_ready`), one `solve_attempt` per answer it makes, and `solve_finished` (`reason`: `solved`, `solve_failed`, `gap_not_found`, `not_a_puzzle`, or a step name such as `puzzle_ready` when it timed out).
+
+A `solve_attempt` has:
+
+- `n` (attempt in the run, from 1), `puzzle` (the capture number) and `challenge_id`. Pair it with `puzzle_captured` and `answer_request` by `challenge_id`.
+- `finder`, `target_x` (what the finder returned, also the dx) and `mover`, `duration` (seconds of planned path) and `steps`.
+- `stuck_retries`: how many times the handle did not move after the first step and was pressed again on the same puzzle. These do not add to `n`.
+- `handle_left` and `piece_left`: read just before the release. Both should equal `target_x`; a difference means the drag fell short.
+- `outcome`: `accepted` (an answer and no new puzzle within `answer_settle`), `rejected` (an answer and then a new puzzle), `no_answer` (no answer request arrived), or `gap_not_found` (no drag was made; `target_x` is null). The final judge is still the login: a run is `success`/`solved` only if the login verified.
+- `error` when the drag raised.
+
+To compare finders or movements, group runs by bot id and count the `accepted` attempts over all attempts, and look at `n` of the accepted one. Not verified on the real site.
+
