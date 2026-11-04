@@ -72,6 +72,31 @@ ALL_SIGNALS = Profile(
     init_script=NO_CDC.init_script,
 )
 
+# The user agent headful Chrome sends in the worker. It must follow the Chrome version pinned in
+# the Dockerfile (CHROME_VERSION): Chrome reports only the major version, then `.0.0.0`.
+HEADFUL_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/156.0.0.0 Safari/537.36"
+)
+
+# On top of all-signals, makes headless Chrome look like the headful one in the worker: the user
+# agent without `Headless` (this also fixes `navigator.appVersion`) and a 1280x800 screen and
+# window. `--window-size` alone left the screen at 800x600; `--screen-info` fixes that.
+HEADLESS_HUMAN = Profile(
+    "headless-human",
+    "Everything in all-signals, plus the user agent and a 1280x800 screen and window that headful "
+    "Chrome has, because live headless runs were blocked while headful ones got a puzzle and "
+    "headless still sent HeadlessChrome and an 800x600 screen. Meant for headless runs only.",
+    args=(
+        *ALL_SIGNALS.args,
+        f"--user-agent={HEADFUL_USER_AGENT}",
+        "--window-size=1280,800",
+        "--screen-info={1280x800}",
+    ),
+    excluded_switches=ALL_SIGNALS.excluded_switches,
+    init_script=ALL_SIGNALS.init_script,
+)
+
 PROFILES: dict[str, Profile] = {
-    p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX, ALL_SIGNALS)
+    p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX, ALL_SIGNALS, HEADLESS_HUMAN)
 }

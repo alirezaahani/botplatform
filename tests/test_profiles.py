@@ -6,7 +6,7 @@ from botplatform.bots import BOTS, arcaptcha
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
-from botplatform.profiles import BASELINE, PROFILES, STEALTH_FLAGS, Profile
+from botplatform.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
 from botplatform.worker.registry import validate
 from tests.conftest import RecordingContext
 
@@ -220,3 +220,40 @@ def test_all_signals_headful_also_has_webgl(fake, display):
     assert signals["webdriver"] is False
     assert not [name for name in signals["automation_properties"] if "cdc_" in name]
     assert signals["webgl"]["vendor"] and signals["webgl"]["renderer"]
+
+
+HUMAN_JS = """return {
+  ua: navigator.userAgent, app_version: navigator.appVersion,
+  brands: navigator.userAgentData ? navigator.userAgentData.brands.map(b => b.brand) : null,
+  screen: [screen.width, screen.height], inner: [innerWidth, innerHeight],
+  outer: [outerWidth, outerHeight]
+}"""
+
+
+def page_view(profile: Profile, fake, headless: bool) -> dict:
+    with chrome(headless=headless, profile=profile) as driver:
+        driver.get(fake.url)
+        return driver.execute_script(HUMAN_JS)
+
+
+def test_headless_human_looks_like_headful_chrome_in_headless(fake):
+    base = page_view(BASELINE, fake, headless=True)
+    assert "HeadlessChrome" in base["ua"] and base["screen"] == [800, 600]  # the problem
+    view = page_view(PROFILES["headless-human"], fake, headless=True)
+    assert view["ua"] == HEADFUL_USER_AGENT
+    assert "Headless" not in view["app_version"]
+    assert view["screen"] == [1280, 800]
+    assert view["outer"] == [1280, 800]
+    assert view["inner"][0] == 1280
+    assert not view["brands"] or all("Headless" not in b for b in view["brands"])
+    signals = page_signals(PROFILES["headless-human"], fake)
+    assert signals["webdriver"] is False
+    assert signals["webgl"]["renderer"]
+    assert not [name for name in signals["automation_properties"] if "cdc_" in name]
+
+
+def test_headless_human_does_not_change_headful(fake, display):
+    plain = page_view(PROFILES["all-signals"], fake, headless=False)
+    human = page_view(PROFILES["headless-human"], fake, headless=False)
+    assert human == plain
+    assert human["ua"] == HEADFUL_USER_AGENT  # the constant matches what headful really sends
