@@ -123,7 +123,9 @@ Then register it in the explicit list in `src/botplatform/bots/__init__.py`:
 BOTS: list[type[Bot]] = [ExampleBot, ArcaptchaBot, HelloBot]
 ```
 
-The worker checks the list at startup (unique `id`, non-empty `name` and `modes`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
+The worker checks the list at startup (unique `id`, non-empty `name` and `modes`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
+
+You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx) -> BotResult`, and the core never imports Selenium. Only `src/botplatform/bots/selenium_support.py` is Selenium-specific: the `chrome()` launcher, the alert helper and `ResponseWatcher`. It is an optional helper. A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`. Nothing in this repo has a Playwright bot, and Playwright is not a dependency. Its browser would also have to be installed in the worker image.
 
 ## Data persistence
 
