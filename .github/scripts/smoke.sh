@@ -12,12 +12,16 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 [ -f .env ] || { echo "No .env found. Copy .env.example to .env first." >&2; exit 1; }
 
-port="$(grep -E '^WEB_PORT=' .env | tail -n1 | cut -d= -f2 || true)"
+# Read one setting from .env, or print the default when it is not set.
+env_value() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- || true; }
+port="$(env_value WEB_PORT)"
+db_user="$(env_value POSTGRES_USER)"
+db_name="$(env_value POSTGRES_DB)"
 base="http://127.0.0.1:${port:-8000}"
 startup_timeout="${STARTUP_TIMEOUT:-300}"
 run_timeout="${RUN_WAIT_TIMEOUT:-300}"
 
-psql() { docker compose exec -T db psql -U botplatform -d botplatform -tA -F '|' -c "$1"; }
+psql() { docker compose exec -T db psql -U "${db_user:-botplatform}" -d "${db_name:-botplatform}" -tA -F '|' -c "$1"; }
 
 echo "Starting the stack"
 docker compose up -d --build
