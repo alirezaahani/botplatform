@@ -101,6 +101,7 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
     still_queued = (
         run.status == Status.QUEUED and datetime.now(UTC) - run.queued_at > STILL_QUEUED_AFTER
     )
+    active = run.status in ACTIVE_STATUSES
     return templates.TemplateResponse(
         request,
         "run.html",
@@ -108,7 +109,9 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
             "run": run,
             "events": events,
             "artifacts": artifacts,
-            "active": run.status in ACTIVE_STATUSES,
+            "active": active,
+            "can_watch": active and run.mode == "headful" and bool(run.worker_id),
+            "viewer_seen": any(event.type == "viewer_connected" for event in events),
             "still_queued": still_queued,
         },
     )

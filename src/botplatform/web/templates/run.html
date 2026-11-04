@@ -7,6 +7,12 @@
   {% if still_queued %}
   <p class="notice">Still queued. Is the worker running? Check with <code>docker compose ps</code>.</p>
   {% endif %}
+  {% if viewer_seen %}
+  <p class="notice">A viewer was connected during this run, so the result may be human-assisted.</p>
+  {% endif %}
+  {% if can_watch %}
+  <p><a href="/runs/{{ run.id }}/live">Watch live</a></p>
+  {% endif %}
   <dl>
     <dt>Status</dt><dd><span class="status {{ run.status }}">{{ run.status }}</span></dd>
     <dt>Reason</dt><dd>{{ run.reason or "—" }}</dd>
