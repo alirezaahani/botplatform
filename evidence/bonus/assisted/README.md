@@ -12,7 +12,7 @@ Seven live runs of `arcaptcha-assisted` on 2026-11-04, from the same data center
 | 5 | slow and careful | about 38 | 140 | `success: true` | `success` / `human_solved` |
 | 6 | wrong on purpose, then a correct solve | first answer about 25, then about 7 more | 168 (wrong), then 178 | `success: false`, then `success: true` | `success` / `human_solved` |
 
-A seventh run (an extra attempt at a straight drag) is included in `runs.json`. The table lists the person's description for each.
+Run 4b was an extra attempt at a straight drag after the person said run 4 had not been straight. `runs.json` lists the runs in start order, so 4b follows 4.
 
 ## What the runs show
 
