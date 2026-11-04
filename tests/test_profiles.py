@@ -4,9 +4,9 @@ import pytest
 
 from botplatform.bots import BOTS, arcaptcha
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
-from botplatform.profiles import BASELINE, PROFILES, STEALTH_FLAGS, Profile
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
+from botplatform.profiles import BASELINE, PROFILES, STEALTH_FLAGS, Profile
 from botplatform.worker.registry import validate
 from tests.conftest import RecordingContext
 
@@ -87,7 +87,8 @@ def test_run_records_profile_signals_and_create_request(fake, credentials, profi
     assert ctx.one("browser_profile") == profile.settings()
     signals = ctx.one("browser_signals")
     assert SIGNAL_KEYS <= signals.keys()
-    assert signals["webdriver"] is (profile is not STEALTH_FLAGS)
+    hides_webdriver = "--disable-blink-features=AutomationControlled" in profile.args
+    assert signals["webdriver"] is (not hides_webdriver)
     assert signals["window"]["inner_width"] > 0
     request = ctx.one("create_request")
     assert request["request"] == {"site_key": "fake"}  # what the page sent
