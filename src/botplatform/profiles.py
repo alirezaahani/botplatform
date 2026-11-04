@@ -82,8 +82,8 @@ HEADFUL_USER_AGENT = (
 # On top of all-signals, makes headless Chrome look like the headful one in the worker: the user
 # agent without `Headless` (this also fixes `navigator.appVersion`) and a 1280x800 screen and
 # window. `--window-size` alone left the screen at 800x600; `--screen-info` fixes that.
-HEADLESS_HUMAN = Profile(
-    "headless-human",
+ALL_SIGNALS_HEADLESS = Profile(
+    "all-signals-headless",
     "Everything in all-signals, plus the user agent and a 1280x800 screen and window that headful "
     "Chrome has, because live headless runs were blocked while headful ones got a puzzle and "
     "headless still sent HeadlessChrome and an 800x600 screen. Meant for headless runs only.",
@@ -98,5 +98,6 @@ HEADLESS_HUMAN = Profile(
 )
 
 PROFILES: dict[str, Profile] = {
-    p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX, ALL_SIGNALS, HEADLESS_HUMAN)
+    p.name: p
+    for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX, ALL_SIGNALS, ALL_SIGNALS_HEADLESS)
 }
