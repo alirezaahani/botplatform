@@ -9,7 +9,7 @@ import pytest
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import SOLVER_BOTS
 from botplatform.contract import Status
-from botplatform.profiles import ALL_SIGNALS
+from botplatform.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
 from botplatform.solver import gap
 from tests.conftest import FAST, RecordingContext, assert_no_password
 from tests.fake_demo.server import create_reply
@@ -138,16 +138,37 @@ def test_a_handle_that_never_moves_gives_up_after_the_retries(solve, fake):
     assert fake.answer_requests == []
 
 
-def test_the_solver_bots_are_registered_for_headful_with_a_plain_description():
+def test_the_solver_bots_are_registered_for_both_modes_with_a_plain_description():
     assert [b.id for b in BOTS][-4:] == BOT_IDS
     for bot in SOLVER_BOTS:
-        assert bot.modes == ["headful"]
+        assert bot.modes == ["headless", "headful"]
         assert bot.profile is ALL_SIGNALS
         assert "automatic solver" in bot.name
         assert "automatic solver" in bot.description
+        assert "all-signals-headless" in bot.description
     cv_linear, cv_eased, sil_linear, sil_eased = SOLVER_BOTS
     assert "cv finder" in cv_linear.name and "linear movement" in cv_linear.name
     assert "eased movement" in cv_eased.name
     assert "silhouette finder" in sil_linear.name and "linear movement" in sil_linear.name
     assert "silhouette finder" in sil_eased.name and "eased movement" in sil_eased.name
     assert "silhouette" in sil_linear.description
+
+
+@pytest.mark.parametrize("bot", SOLVER_BOTS, ids=BOT_IDS)
+def test_each_mode_gets_its_own_browser_profile(bot):
+    instance = bot()
+    assert instance.profile_for("headful") is ALL_SIGNALS
+    assert instance.profile_for("headless") is ALL_SIGNALS_HEADLESS
+    assert instance.profile_for("anything else") is ALL_SIGNALS  # falls back to `profile`
+
+
+def test_a_profile_passed_in_wins_over_the_mode():
+    assert SOLVER_BOTS[0](profile=ALL_SIGNALS).profile_for("headless") is ALL_SIGNALS
+
+
+def test_a_headless_run_uses_the_headless_profile_and_still_solves(solve):
+    result, ctx = solve("arcaptcha-solver-silhouette-eased")  # the fake's context mode is headless
+
+    assert (result.status, result.reason) == (Status.SUCCESS, "solved")
+    assert ctx.one("browser_profile")["name"] == "all-signals-headless"
+    assert ctx.one("solve_attempt")["outcome"] == "accepted"

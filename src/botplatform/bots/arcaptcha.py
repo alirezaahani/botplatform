@@ -33,7 +33,14 @@ from botplatform.bots.selenium_support import (
     chrome,
 )
 from botplatform.contract import Bot, BotResult, RunContext, Status
-from botplatform.profiles import ALL_SIGNALS, BASELINE, PROFILES, Profile, bot_id
+from botplatform.profiles import (
+    ALL_SIGNALS,
+    ALL_SIGNALS_HEADLESS,
+    BASELINE,
+    PROFILES,
+    Profile,
+    bot_id,
+)
 from botplatform.solver import gap, movement
 
 DEMO_URL = "https://demo.arcaptcha.co/"
@@ -282,6 +289,8 @@ class ArcaptchaBot(Bot):
     )
     modes: ClassVar[list[str]] = ["headless", "headful"]
     profile: ClassVar[Profile] = BASELINE
+    # A profile for a mode, where `profile` is not right for every mode. Not listed: `profile`.
+    profile_by_mode: ClassVar[dict[str, Profile]] = {}
     wait_for_person: ClassVar[bool] = False
     drag_probe: ClassVar[bool] = False
     solve_with: ClassVar[tuple[str, str] | None] = None  # (finder name, mover name)
@@ -295,6 +304,11 @@ class ArcaptchaBot(Bot):
         self.url = url
         self.timeouts = timeouts
         self.profile = profile or type(self).profile
+        self._given_profile = profile  # a profile passed in wins over the one for the mode
+
+    def profile_for(self, mode: str) -> Profile:
+        """The browser profile for `mode`: the one passed in, else the class's for that mode."""
+        return self._given_profile or type(self).profile_by_mode.get(mode, self.profile)
 
     def run(self, ctx: RunContext) -> BotResult:
         username = os.environ.get("ARCAPTCHA_USERNAME")
@@ -306,7 +320,8 @@ class ArcaptchaBot(Bot):
                 "Set ARCAPTCHA_USERNAME and ARCAPTCHA_PASSWORD in .env",
             )
         try:
-            with chrome(headless=ctx.mode == "headless", profile=self.profile) as driver:
+            profile = self.profile_for(ctx.mode)
+            with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
                 scenario = Scenario(
                     ctx,
                     driver,
@@ -314,7 +329,7 @@ class ArcaptchaBot(Bot):
                     password,
                     self.url,
                     self.timeouts,
-                    self.profile,
+                    profile,
                     self.wait_for_person,
                     self.drag_probe,
                     self.solve_with,
@@ -385,10 +400,11 @@ def solver_bot(finder: str, mover: str) -> type[ArcaptchaBot]:
                 "(Selenium ActionChains), up to 3 answers per run, then logs in. A verified login "
                 "ends as success with the reason solved. If no gap is found the run ends as "
                 "blocked / gap_not_found, and after 3 rejected answers as blocked / solve_failed. "
-                "Headful only."
+                "Headful uses the all-signals profile and headless the all-signals-headless one."
             ),
-            "modes": ["headful"],
+            "modes": ["headless", "headful"],
             "profile": ALL_SIGNALS,
+            "profile_by_mode": {"headful": ALL_SIGNALS, "headless": ALL_SIGNALS_HEADLESS},
             "solve_with": (finder, mover),
         },
     )
