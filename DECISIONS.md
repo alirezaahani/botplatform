@@ -464,6 +464,28 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Not verified:** nothing has run on the live site. The real `answer` body format is unknown (the fake uses a made-up one), the 3 s rule is a guess the live experiment will check, and we have not run the Chrome-and-viewer path with a real person.
 
+### Solver core: two automatic solver bots
+
+**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (headful only, profile `all-signals`). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `Scenario._run_solver`. Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+
+**Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
+
+**Decisions and reasons:**
+
+- **Vendored CV, bytes in and out.** `detect.py` and `geometry.py` are copied unchanged from the captcha-solve project, with a thin wrapper that decodes bytes in memory (no temp files). **Why:** the submission must build from this repository alone, with no cross-repository dependency. OpenCV is an optional extra (`solver`), installed in the worker and test images only, so the web and migrate images stay small, and it is imported lazily so the bot registry loads without it.
+- **Swappable finder.** A finder is `find_gap_x(background_png, piece_png, piece_top) -> int` registered by name in `FINDERS`; a bot is `arcaptcha-solver-<finder>-<mover>`. **Why:** a different method can then be compared fairly, with the same movement, retries and events. A finder raises `GapNotFound` for no gap or a target outside 0..196.
+- **Selenium `ActionChains` for the drag.** **Why:** live data showed Selenium and CDP events are both `isTrusted: true` and both were accepted, so the simpler path is enough. One motion: move to the handle centre, press, move, release, with no second grab.
+- **Two movement shapes.** `linear` is 8 equal steps over about 0.6 s (the shape proven live). `eased` is 25-40 steps with an ease-out speed profile over 0.8-1.5 s, a 1-2 px vertical wobble and no overshoot. **Why:** we do not know how sensitive the site is to movement, and the run history can now compare them.
+- **No closed loop.** **Why:** the handle-to-piece mapping is exact, so there is nothing to correct after the press. The only check is that the handle moved after the first step; if it did not, the bot releases and presses again on the same puzzle (2 times at most, not counted as an attempt), because once a first drag did nothing while the widget was not ready.
+- **3 attempts per run.** **Why:** a wrong answer is cheap (a new puzzle in 0.5 s, 8 in a row were not blocked) but the run has a 180 s limit and an unlimited loop would hide a broken finder. A run reports the attempt number in `solve_attempt`.
+- **No gap means the run ends.** The bot does not guess or send a deliberately wrong answer. **Why:** failures are then counted honestly as `gap_not_found`, separate from answers the site rejected. The normal login step still runs, as for every other early result, and cannot change the result.
+- **Headful only.** **Why:** it is the only mode shown to get a puzzle (headful 11/11 puzzle, headless 11/11 block).
+- **Longer wait for the first puzzle.** `StepTimeouts.puzzle_ready` is 20 s. **Why:** the first puzzle's images came late (the 5 s capture timed out in 2 of 5 runs). The solver reuses the bytes the capture fetched in the page; a puzzle it cannot capture ends the run as `timeout`/`puzzle_ready`.
+
+**Rejected alternative:** rebuilding each background by taking the per-pixel mode over about 100 samples per background type and subtracting it. It is simpler, but fragile (it breaks with any new background) and needs reference data shipped with the code.
+
+**Not verified:** nothing has run on the live site. The fake demo accepts an answer equal to a known target, so tests show our own logic, not that the real site accepts these paths.
+
 ## Platform support
 
 amd64 only. ARM64 was not considered, and the README states this limitation.
