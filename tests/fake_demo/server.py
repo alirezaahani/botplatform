@@ -11,7 +11,9 @@ real site would accept the bot.
 import asyncio
 import json
 import socket
+import struct
 import threading
+import zlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +51,27 @@ def create_reply(captcha_type: str, challenge_id: str | None = CHALLENGE_ID, **c
     return Reply(json={"status": "OK", "captcha_type": captcha_type, "content": content})
 
 
+def tiny_png(width: int, height: int, grey: int) -> bytes:
+    """A valid grey PNG of the given size."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    rows = b"".join(b"\x00" + bytes([grey]) * width for _ in range(height))
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
+BACKGROUND_PNG = tiny_png(8, 4, 200)
+PIECE_PNG = tiny_png(3, 3, 50)
+
+
 class _Server:
     def __init__(self, app: FastAPI) -> None:
         self.sock = socket.socket()
@@ -80,6 +103,7 @@ class FakeDemo:
         self.checkbox = True
         self.second_create = False  # the page sends a second `create` after the first answer
         self.alert_on_click: str | None = None
+        self.broken_puzzle_images = False  # the puzzle's image URLs answer 404
         self.toast: dict[str, Any] = {"none": False, "kind": None, "text": None}
         self.creates: list[Reply] = [create_reply("accept")]  # the last one repeats
         # What the page's own answer button posts to `answer`. The last reply repeats.
@@ -88,6 +112,7 @@ class FakeDemo:
         # What the tests inspect
         self.create_requests = 0
         self.answer_requests: list[dict[str, Any]] = []
+        self.image_requests: list[str] = []
         self.logins: list[dict[str, Any]] = []
         self._release = threading.Event()  # set on teardown, to free every hanging request
 
@@ -164,7 +189,7 @@ class FakeDemo:
         app.add_middleware(
             CORSMiddleware,
             allow_origin_regex=r"http://127\.0\.0\.1:\d+",
-            allow_methods=["POST"],
+            allow_methods=["POST", "GET"],
             allow_headers=["content-type"],
         )
 
@@ -173,6 +198,14 @@ class FakeDemo:
             reply = self.creates[min(self.create_requests, len(self.creates) - 1)]
             self.create_requests += 1
             return await self._respond(reply, obfuscate=True)
+
+        @app.get("/arcaptcha/api/puzzles/{challenge_id}/undefined/{part}")
+        async def puzzle_image(challenge_id: str, part: str) -> Response:
+            self.image_requests.append(f"{challenge_id}/{part}")
+            if self.broken_puzzle_images:
+                return Response(status_code=404)
+            png = PIECE_PNG if part == "piece" else BACKGROUND_PNG
+            return Response(png, media_type="image/png")
 
         @app.post("/arcaptcha/api/answer")
         async def answer(request: Request) -> Response:

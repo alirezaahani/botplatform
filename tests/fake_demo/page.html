@@ -68,6 +68,14 @@
         solve.textContent = 'solve';
         solve.addEventListener('click', sendAnswer);
         popup.appendChild(solve);
+        // Like the real widget: a background image and, in an absolutely positioned div, the piece.
+        const base = CONFIG.api_origin + '/arcaptcha/api/puzzles/' + challengeId + '/undefined/';
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position:relative;width:260px;height:160px';
+        wrapper.innerHTML = '<img src="' + base + 'background" style="width:260px;height:160px">'
+          + '<div style="position:absolute;left:0;top:0"><img draggable="true" class="x puzzle" '
+          + 'src="' + base + 'piece" style="position:absolute;left:0px;top:20px;width:40px"></div>';
+        popup.appendChild(wrapper);
       }
       document.body.appendChild(popup);
     }
