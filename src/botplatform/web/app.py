@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 
 from botplatform.contract import ACTIVE_STATUSES, Status
 from botplatform.db import BotRecord, Run, RunArtifact, RunEvent
-from botplatform.web import live
+from botplatform.web import bonus, live
 from botplatform.web.deps import DbSession, parse_id
 from botplatform.worker import queue
 
@@ -24,6 +24,7 @@ STILL_QUEUED_AFTER = timedelta(minutes=1)
 app = FastAPI(title="Bot Platform")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 app.include_router(live.router)
+app.include_router(bonus.router)
 templates = Jinja2Templates(directory=HERE / "templates")
 
 
