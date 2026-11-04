@@ -1,6 +1,6 @@
 # Bot platform
 
-A small platform that runs bots and records every run. A web UI launches a run, a worker executes it (a real Chrome for browser bots), and Postgres holds the queue, the status, the timeline and the screenshots. It ships with a trivial `example` bot, an ARCaptcha demo-site bot, and variants of that bot used for the bonus work (see [Reducing CAPTCHA blocking](#reducing-captcha-blocking-bonus)).
+A small platform that runs bots and records every run. A web UI launches a run, a worker executes it (a real Chrome for browser bots), and Postgres holds the queue, the status, the timeline and the screenshots. It ships with a trivial `example` bot, an ARCaptcha demo-site bot, variants of that bot used for the bonus work (see [Reducing CAPTCHA blocking](#reducing-captcha-blocking-bonus)), and four solver bots that solve the slider puzzle by themselves (see [Solving the slider](#solving-the-slider-the-solver-bots)).
 
 ```
 browser --> web --> Postgres <-- worker(s)
@@ -26,7 +26,7 @@ Open http://127.0.0.1:8000, pick a bot on `/bots` and press launch. The first bu
 
 ## Using it
 
-- `/bots`: the registered bots and their modes, with a launch button for each. The newest bot is first. The list has the baseline `arcaptcha`, one `arcaptcha-<profile>` bot per browser profile, the assisted bot `arcaptcha-assisted`, and the `example` bot.
+- `/bots`: the registered bots and their modes, with a launch button for each. The newest bot is first. The list has the baseline `arcaptcha`, one `arcaptcha-<profile>` bot per browser profile, the assisted bot `arcaptcha-assisted`, the experiment `arcaptcha-drag-probe`, the four `arcaptcha-solver-*` bots, and the `example` bot.
 - `/bonus` and `/bonus.md`: the bonus report, for each bot and mode, how often the site did not block the bot (filters `?bot=` and `?since=`). "Not blocked" means that the first `create` answer of a run had a CAPTCHA type other than `block`. It does not mean the run succeeded.
 - `/runs`: the run history.
 - `/runs/{id}`: status, reason, `challenge_id`, the timeline and screenshots. The page refreshes while the run is active.
@@ -82,8 +82,8 @@ Live results, first `create` answer of each run (one IP, 2026-11-04, from [evide
 Limits, stated plainly:
 
 - One IP, one day and small counts. The repeat batches were run in blocks and not interleaved with other profiles. Results depend on the IP and the day, and may differ for you.
-- Nothing in this repo solves the slider. A run that gets a puzzle still ends `blocked` with reason `challenge_unsolved`, never `success`. The approach reduces blocking, it does not solve the CAPTCHA.
-- A `blocked` or unsolved run is a failed run in the history. No success rate is claimed for the required workflow.
+- These profile bots do not solve the slider. A run of one of them that gets a puzzle still ends `blocked` with reason `challenge_unsolved`, never `success`. The profiles reduce blocking; the solver bots (below) are what solve the puzzle.
+- A `blocked` or unsolved run is a failed run in the history. The success counts for the solver bots are in the next sections; none is claimed for the profile bots.
 
 ### Reproducing the measurement
 
@@ -116,6 +116,41 @@ Then open `/bonus` (or `/bonus.md`, add `?bot=arcaptcha-all-signals` or `?since=
 
 Status `success` with reason `human_solved` means a person solved the puzzle. It is not a bot success. Result: in 7 runs, every correct answer was accepted and every login was verified. One run also had a deliberately wrong answer first, which the site rejected and replaced with a new puzzle. The evidence is in [evidence/bonus/assisted/](evidence/bonus/assisted/README.md).
 
+## Solving the slider (the solver bots)
+
+Four automatic bots, all `headful`, with the `all-signals` browser profile. Each is a pair of a gap finder and a movement shape:
+
+| Bot | Finds the gap with | Moves the handle |
+|---|---|---|
+| `arcaptcha-solver-cv-linear` | `cv`: detects the light halo around the gap and measures its body square | 8 equal steps, about 0.6 s |
+| `arcaptcha-solver-cv-eased` | `cv` | ease-out over 25 to 40 steps, 0.8 to 1.5 s, 1 to 2 px vertical wobble |
+| `arcaptcha-solver-silhouette-linear` | `silhouette`: slides the piece's own outline along its row and scores the fit | 8 equal steps |
+| `arcaptcha-solver-silhouette-eased` | `silhouette` | ease-out, as above |
+
+**How a run goes.** The bot ticks the checkbox like the others. If the site shows a puzzle, the bot fetches both images inside the page (the piece and the background, in memory), asks the finder for the answer, and drags the slider handle there with Selenium in one press, one smooth motion and one release. The site judges the answer, then the platform logs in and verifies the result like for any bot. The bot makes up to 3 answers: a wrong one brings a new puzzle at once.
+
+**What the site wants, as measured on the live page.** The background is 260x160 px and the piece a separate 50x50 PNG with its outline in the alpha channel. The handle and the piece move together 1:1 along x, stop at 196 px, and the answer sent is that position. The right answer is the gap's left edge minus 10 px. Drags that landed exactly there were accepted; drags 10 px or more away were rejected; people were accepted up to 4 px away. The evidence is in [evidence/solver/](evidence/solver/README.md).
+
+**Results**
+
+| Reason | Status | Meaning |
+|---|---|---|
+| `solved` | `success` | The answer was accepted and the login was verified. |
+| `solve_failed` | `blocked` | 3 answers in a row were rejected. |
+| `gap_not_found` | `blocked` | The finder found no gap, so the bot made no drag and did not guess. |
+| `puzzle_ready` | `timeout` | The puzzle's images did not load in time. |
+
+Live results, headful, one IP, 2026-11-04: each of the four bots was run 10 times, interleaved, 15 seconds apart. All 40 runs ended `success` / `solved`, all on the first attempt, with a median run of about 16 s. Table and per-run rows: [evidence/solver/results-headful-2x2.md](evidence/solver/results-headful-2x2.md).
+
+Limits, stated plainly:
+
+- 40 of 40 does not mean a 100% success rate: with no failures it only says the failure rate is probably below about 7%. It also does not separate the four bots; neither the finder nor the movement shape changed whether the site accepted the answer.
+- One IP, one evening and headful only. Another network, time of day or mode may differ, and a site that scores movement could change without notice.
+- The 40-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` and waits for each run. The batch runner above works on browser profiles and does not run these bots.
+- The solver needs OpenCV, which is installed in the worker image only (the `solver` extra in `pyproject.toml`).
+
+To run one: pick a `arcaptcha-solver-*` bot on `/bots` and press launch. Open the run page to see the timeline: `solve_attempt` holds the finder's answer, the drag and where the handle ended (how to read it: [evidence/solver/README.md](evidence/solver/README.md)). Design reasons: [DECISIONS.md](DECISIONS.md), the solver sections of step 8.
+
 ## Scaling
 
 ```
@@ -143,9 +178,11 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-=========== 146 passed, 1 deselected, 1 warning in 207.44s (0:03:27) ===========
+=========== 222 passed, 1 deselected, 1 warning in 293.70s (0:04:53) ===========
 (the deselected test is the live test)
 ```
+
+Known flaky test: `test_a_second_puzzle_after_a_rejected_answer_is_number_two` in `tests/test_puzzle_capture.py` has failed in some full runs and passed alone and in others. A fake person answers a puzzle faster than the bot polls, so the two `create` responses can arrive together and the bot captures only the latest. A real person cannot do that. It is not fixed.
 
 ### What the tests cover
 
@@ -172,6 +209,11 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases 
 | Bonus report | `tests/test_bonus.py` (6 tests): per bot and mode counts, the first `create` answer only, viewer runs excluded, `?since=` and `?bot=`, `/bonus.md` header, empty history | rates and filters |
 | Assisted bot | `tests/test_assisted.py` (11 tests): a solved puzzle then a verified login is `success`, `human_solved`; a rejected answer brings a second puzzle; nobody answering is a timeout; a failed login after a solve is `verification_failed`; it is registered `headful` only | `success`, `human_solved` and the failure cases |
 | Newest first | `tests/test_order.py` (4 tests): the `BOTS` order, `publish` sets and updates `position`, the Bots page and the Bonus report list the newest bot first | page and report order |
+| Puzzle capture | `tests/test_puzzle_capture.py` (5 tests): a puzzle is saved as two artifacts and an event, a second puzzle after a rejected answer is number two and pairs with its answer by `challenge_id`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
+| Drag probe | `tests/test_drag_probe.py` (10 tests): both drag methods alternate, samples show the handle-to-piece ratio, a raising attempt is recorded, the budget and an accepted answer stop the probe | `blocked`, `drag_probe_done` |
+| Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
+| Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
+| Solver bots | `tests/test_solver_bot.py` (10 tests): all four bots solve a real fixture puzzle on the fake page, a wrong first target is rejected and then solved, three rejections end `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
 
 ## Adding a bot
 
@@ -230,7 +272,7 @@ docker compose down -v    # also deletes the database volume
 - The first build is slow: it downloads Chrome for Testing. Later builds reuse the cached layers.
 - `set it in .env` from Compose: `.env` is missing or a required value is empty. Run `cp .env.example .env`.
 - A password with special characters breaks the database connection: it is placed in a connection URL. Use letters and numbers only, then run `docker compose down -v` once, because Postgres keeps the password it first started with.
-- A run ends `blocked`: the site refused the bot or showed a puzzle (`captcha_blocked`, `challenge_unsolved`). This is a recorded result, not a bug. The `challenge_id` is kept on the run page.
+- A run ends `blocked`: the site refused the bot or showed a puzzle (`captcha_blocked`, `challenge_unsolved`). This is a recorded result, not a bug. The `challenge_id` is kept on the run page. For a solver bot the reasons are `solve_failed` (3 answers rejected) and `gap_not_found`; the timeline shows each attempt.
 - A new bot is not on `/bots`: the worker publishes the list at startup. Run `docker compose up -d --build worker`.
 - A run stays `queued`: no worker is running. The run page says so. Check with `docker compose ps`.
 - No "Watch live" link: it only shows for `headful` runs that are queued or running and that a worker has picked up (`can_watch` in `src/botplatform/web/app.py`). Headless and finished runs have none.
