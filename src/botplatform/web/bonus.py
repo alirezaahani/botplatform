@@ -11,10 +11,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import exists, select
+from sqlalchemy import case, exists, select
 from sqlalchemy.orm import Session
 
-from botplatform.db import Run, RunEvent
+from botplatform.db import BotRecord, Run, RunEvent
 from botplatform.stats import wilson_interval
 from botplatform.web.deps import DbSession
 
@@ -77,7 +77,12 @@ def collect(session: Session, since: datetime | None, bot: str | None) -> list[R
         Run.challenge_id,
         _first_event("captcha_type"),
         viewed,
-    ).order_by(Run.bot_id, Run.mode)
+    ).select_from(Run).join(BotRecord, BotRecord.id == Run.bot_id)
+    # Newest bot first, like the Bots page. Alphabetically headful sorts first, so headless
+    # before headful needs the explicit case.
+    query = query.order_by(
+        BotRecord.position.desc(), Run.bot_id, case((Run.mode == "headless", 0), else_=1), Run.mode
+    )
     if since is not None:
         query = query.where(Run.queued_at >= since)
     if bot:
