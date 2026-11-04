@@ -59,14 +59,18 @@ def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) ->
 def list_runs(
     request: Request,
     session: DbSession,
-    status: Status | None = None,
+    status: str = "",  # the form's "All" option sends an empty string
     page: Annotated[int, Query(ge=1)] = 1,
 ) -> HTMLResponse:
+    try:
+        selected_status = Status(status) if status else None
+    except ValueError:
+        raise HTTPException(400, f"Unknown status '{status}'") from None
     query = select(Run)
     count_query = select(func.count()).select_from(Run)
-    if status is not None:
-        query = query.where(Run.status == status)
-        count_query = count_query.where(Run.status == status)
+    if selected_status is not None:
+        query = query.where(Run.status == selected_status)
+        count_query = count_query.where(Run.status == selected_status)
     runs = session.scalars(
         query.order_by(Run.queued_at.desc()).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE)
     ).all()
@@ -77,7 +81,7 @@ def list_runs(
         {
             "runs": runs,
             "statuses": list(Status),
-            "selected_status": status,
+            "selected_status": selected_status,
             "page": page,
             "has_next": page * PAGE_SIZE < total,
             "any_active": any(run.status in ACTIVE_STATUSES for run in runs),

@@ -163,3 +163,10 @@ def test_proxy_refuses_an_unknown_run(client: TestClient) -> None:
 def test_watch_live_link_rules(client: TestClient, kwargs: dict, link: bool) -> None:
     run_id = make_run(**kwargs)
     assert (f'href="/runs/{run_id}/live"' in client.get(f"/runs/{run_id}").text) is link
+
+
+def test_run_history_filter_accepts_all_and_rejects_unknown(client: TestClient) -> None:
+    make_run()
+    assert client.get("/runs?status=").status_code == 200  # the form's "All" option
+    assert client.get("/runs?status=queued").status_code == 200
+    assert client.get("/runs?status=nonsense").status_code == 400
