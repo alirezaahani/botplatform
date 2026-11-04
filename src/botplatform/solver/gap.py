@@ -56,4 +56,11 @@ def find_gap_x_cv(background_png: bytes, piece_png: bytes, piece_top: int) -> in
     return check_range(int(geometry.body_bbox[0]) - BODY_TO_ANSWER_OFFSET)
 
 
-FINDERS: dict[str, GapFinder] = {"cv": find_gap_x_cv}
+def find_gap_x_silhouette(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
+    """The gap by matching the piece silhouette along its row (see `silhouette.py`)."""
+    from botplatform.solver.silhouette import find_gap_x_silhouette as find
+
+    return find(background_png, piece_png, piece_top)
+
+
+FINDERS: dict[str, GapFinder] = {"cv": find_gap_x_cv, "silhouette": find_gap_x_silhouette}
