@@ -114,7 +114,7 @@ Then open `/bonus` (or `/bonus.md`, add `?bot=arcaptcha-all-signals` or `?since=
 3. Drag the slider in the live viewer.
 4. The bot sees the accepted answer and logs in.
 
-Status `success` with reason `human_solved` means a person solved the puzzle. It is not a bot success. Result: 7 of 7 correct answers were accepted, each with a verified login. The evidence is in [evidence/bonus/assisted/](evidence/bonus/assisted/README.md).
+Status `success` with reason `human_solved` means a person solved the puzzle. It is not a bot success. Result: in 7 runs, every correct answer was accepted and every login was verified. One run also had a deliberately wrong answer first, which the site rejected and replaced with a new puzzle. The evidence is in [evidence/bonus/assisted/](evidence/bonus/assisted/README.md).
 
 ## Scaling
 
