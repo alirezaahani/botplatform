@@ -11,6 +11,7 @@ capture records `puzzle_capture_failed` and never changes the run's result.
 import base64
 import json
 import os
+import random
 import time
 import traceback
 from collections.abc import Callable
@@ -33,6 +34,7 @@ from botplatform.bots.selenium_support import (
 )
 from botplatform.contract import Bot, BotResult, RunContext, Status
 from botplatform.profiles import ALL_SIGNALS, BASELINE, PROFILES, Profile, bot_id
+from botplatform.solver import gap, movement
 
 DEMO_URL = "https://demo.arcaptcha.co/"
 CHECKBOX = "#input-checkbox"
@@ -69,6 +71,13 @@ class StepTimeouts:
     # limit for the page load and the login) and the most attempts it makes.
     drag_probe: float = 100
     drag_attempts: int = 8
+    # Only for the automatic solver. `puzzle_ready` is how long a puzzle's handle and images get
+    # to appear (the first puzzle's images came late live). A run makes at most `solve_attempts`
+    # answers; a handle that did not move at all is pressed again on the same puzzle up to
+    # `stuck_retries` times, and that does not count as an attempt.
+    puzzle_ready: float = 20
+    solve_attempts: int = 3
+    stuck_retries: int = 2
 
 
 DEFAULT_TIMEOUTS = StepTimeouts()
@@ -245,6 +254,17 @@ def sniff_image(data: bytes, header: str | None) -> tuple[str, str]:
     return "application/octet-stream", "bin"
 
 
+@dataclass
+class CapturedPuzzle:
+    """One puzzle's images as fetched in the page, and the piece's inline `top` in px."""
+
+    n: int
+    challenge_id: str | None
+    background: bytes
+    piece: bytes
+    piece_top: int | None
+
+
 class StepTimeout(Exception):
     """A step ran out of time. `step` becomes the run's reason."""
 
@@ -264,6 +284,7 @@ class ArcaptchaBot(Bot):
     profile: ClassVar[Profile] = BASELINE
     wait_for_person: ClassVar[bool] = False
     drag_probe: ClassVar[bool] = False
+    solve_with: ClassVar[tuple[str, str] | None] = None  # (finder name, mover name)
 
     def __init__(
         self,
@@ -296,6 +317,7 @@ class ArcaptchaBot(Bot):
                     self.profile,
                     self.wait_for_person,
                     self.drag_probe,
+                    self.solve_with,
                 )
                 return scenario.run()
         except Exception:  # noqa: BLE001 - every failure becomes an error result
@@ -346,6 +368,35 @@ class ArcaptchaDragProbeBot(ArcaptchaBot):
     drag_probe = True
 
 
+def solver_bot(finder: str, mover: str) -> type[ArcaptchaBot]:
+    """An automatic solver bot, `arcaptcha-solver-<finder>-<mover>`.
+
+    The finder and mover names are keys of `gap.FINDERS` and `movement.MOVERS`.
+    """
+    return type(
+        f"ArcaptchaSolver{finder.title()}{mover.title()}Bot",
+        (ArcaptchaBot,),
+        {
+            "id": f"arcaptcha-solver-{finder}-{mover}",
+            "name": f"ARCaptcha demo (automatic solver: {finder} finder, {mover} movement)",
+            "description": (
+                "An automatic solver. Ticks the checkbox and, when a puzzle appears, finds the gap "
+                f"with the '{finder}' finder and drags the handle there with '{mover}' movement "
+                "(Selenium ActionChains), up to 3 answers per run, then logs in. A verified login "
+                "ends as success with the reason solved. If no gap is found the run ends as "
+                "blocked / gap_not_found, and after 3 rejected answers as blocked / solve_failed. "
+                "Headful only."
+            ),
+            "modes": ["headful"],
+            "profile": ALL_SIGNALS,
+            "solve_with": (finder, mover),
+        },
+    )
+
+
+SOLVER_BOTS: list[type[ArcaptchaBot]] = [solver_bot("cv", "linear"), solver_bot("cv", "eased")]
+
+
 def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
     """A bot class that runs the ARCaptcha scenario with `profile`, as `arcaptcha-<name>`.
 
@@ -381,11 +432,16 @@ class Scenario:
         profile: Profile = BASELINE,
         wait_for_person: bool = False,
         drag_probe: bool = False,
+        solve_with: tuple[str, str] | None = None,
     ) -> None:
         self.ctx = ctx
         self.profile = profile
         self.wait_for_person = wait_for_person
         self.drag_probe = drag_probe
+        self.solve_with = solve_with
+        self.rng = random.Random()
+        self.solved = False  # the solver's answer was accepted
+        self.capture: CapturedPuzzle | None = None  # the current puzzle's bytes, if captured
         self.answer_records: list[dict[str, Any]] = []  # every `answer` exchange, in order
         self.driver = driver
         self.username = username
@@ -443,6 +499,8 @@ class Scenario:
             return earlier
         self._screenshot("after-login")
         # Both steps found nothing wrong, so this is the only place a run can succeed.
+        if self.solved:
+            return earlier or verdict or BotResult(Status.SUCCESS, "solved")
         if self.person_solved:
             # Not a bot success: a person did the solving. The reason keeps it out of bot counts.
             return earlier or verdict or BotResult(Status.SUCCESS, "human_solved")
@@ -497,6 +555,8 @@ class Scenario:
             return self._wait_for_person()
         if self.drag_probe and result == unsolved and self._types()[-1] == "puzzle":
             return self._run_drag_probe()
+        if self.solve_with and result == unsolved and self._types()[-1] == "puzzle":
+            return self._run_solver()
         return result
 
     def _wait_for_person(self) -> BotResult | None:
@@ -534,9 +594,7 @@ class Scenario:
         """
         timeouts = self.timeouts
         planned = drag_probe.plan(timeouts.drag_attempts)
-        self.ctx.event(
-            "drag_probe_started", {"plan": planned, "seconds": timeouts.drag_probe}
-        )
+        self.ctx.event("drag_probe_started", {"plan": planned, "seconds": timeouts.drag_probe})
         self._screenshot("drag-probe-before")
         deadline = time.monotonic() + timeouts.drag_probe
         reason = "plan_finished"
@@ -597,6 +655,126 @@ class Scenario:
         self.ctx.event("drag_probe_finished", {"reason": reason, "puzzles": self.puzzles})
         self._screenshot("drag-probe-after")
         return BotResult(Status.BLOCKED, "drag_probe_done")
+
+    def _run_solver(self) -> BotResult | None:
+        """Solve the puzzle: find the gap, drag the handle there, up to `solve_attempts` times.
+
+        The answer's body never decides the outcome beyond what `_wait_for_person` also does: an
+        answer followed by no new puzzle within `answer_settle` is taken as accepted, and the
+        login is the judge. Returns None for that, so the login runs.
+        """
+        timeouts = self.timeouts
+        finder_name, mover_name = self.solve_with or ("", "")
+        self.ctx.event(
+            "solve_started",
+            {
+                "finder": finder_name,
+                "mover": mover_name,
+                "attempts": timeouts.solve_attempts,
+                "stuck_retries": timeouts.stuck_retries,
+                "puzzle_ready": timeouts.puzzle_ready,
+            },
+        )
+        try:
+            result = self._solve_loop(finder_name, mover_name)
+        except StepTimeout as timeout:
+            self.ctx.event("solve_finished", {"reason": timeout.step})
+            raise
+        return result
+
+    def _solve_loop(self, finder_name: str, mover_name: str) -> BotResult | None:
+        timeouts = self.timeouts
+        attempts = 0
+        while attempts < timeouts.solve_attempts:
+            self._do(self._drain)
+            if self._types()[-1:] != ["puzzle"]:
+                self.ctx.event("solve_finished", {"reason": "not_a_puzzle", "attempts": attempts})
+                return self._classify_create()
+            puzzle = self._puzzle_ready()
+            attempts += 1
+            attempt: dict[str, Any] = {
+                "n": attempts,
+                "puzzle": puzzle.n,
+                "challenge_id": puzzle.challenge_id,
+                "finder": finder_name,
+                "target_x": None,
+                "mover": mover_name,
+                "dx": None,
+                "duration": None,
+                "steps": None,
+                "stuck_retries": 0,
+                "outcome": None,
+                "handle_left": None,
+                "piece_left": None,
+            }
+            try:
+                target = gap.FINDERS[finder_name](
+                    puzzle.background, puzzle.piece, puzzle.piece_top or 0
+                )
+            except gap.GapNotFound as error:
+                attempt["outcome"] = "gap_not_found"
+                attempt["message"] = str(error)[:200]
+                self.ctx.event("solve_attempt", attempt)
+                self.ctx.event("solve_finished", {"reason": "gap_not_found", "attempts": attempts})
+                return BotResult(Status.BLOCKED, "gap_not_found")
+            attempt["target_x"] = target
+            attempt["dx"] = target
+            answers_before = len(self.answer_records)
+            drag = None
+            try:
+                while True:
+                    path = movement.MOVERS[mover_name](target, self.rng)
+                    attempt["duration"] = round(movement.duration(path), 3)
+                    attempt["steps"] = len(path)
+                    handle = self._handle()
+                    drag = movement.perform_drag(self.driver, handle, path, self._do)
+                    if drag.moved or attempt["stuck_retries"] >= timeouts.stuck_retries:
+                        break
+                    attempt["stuck_retries"] += 1
+                    self._release_everything()
+            except Exception as error:  # noqa: BLE001 - one failed drag must not stop the run
+                attempt["error"] = f"{type(error).__name__}: {str(error).splitlines()[0][:200]}"
+                self._release_everything()
+            if drag is not None:
+                attempt["handle_left"] = drag.handle_left
+                attempt["piece_left"] = drag.piece_left
+            outcome = self._await_next_puzzle(puzzle.n, answers_before)
+            attempt["outcome"] = {
+                "next_puzzle": "rejected",
+                "no_new_puzzle": "accepted",
+                "no_answer": "no_answer",
+            }[outcome]
+            self.ctx.event("solve_attempt", attempt)
+            if attempt["outcome"] == "accepted":
+                self.solved = True
+                self.ctx.event("solve_finished", {"reason": "solved", "attempts": attempts})
+                return None
+        self.ctx.event("solve_finished", {"reason": "solve_failed", "attempts": attempts})
+        return BotResult(Status.BLOCKED, "solve_failed")
+
+    def _handle(self) -> Any:
+        found = self._wait_for(
+            lambda: [
+                e
+                for e in self.driver.find_elements(By.CSS_SELECTOR, drag_probe.HANDLE)
+                if e.is_displayed()
+            ],
+            self.timeouts.puzzle_ready,
+            "puzzle_ready",
+        )
+        return found[0]
+
+    def _puzzle_ready(self) -> CapturedPuzzle:
+        """The current puzzle with its handle on screen and its images in hand, or StepTimeout."""
+        deadline = time.monotonic() + self.timeouts.puzzle_ready
+        self._handle()
+        while self.capture is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self.puzzles == 0:
+                raise StepTimeout("puzzle_ready")
+            challenge_id = self.creates[-1]["challenge_id"]
+            self._capture_puzzle(challenge_id, n=self.puzzles, seconds=remaining)
+        return self.capture
 
     def _drag(self, method: str, dx: int, samples: list[dict[str, Any]]) -> None:
         """Press the handle, move it `dx` px in steps, release. Sample after every step."""
@@ -840,18 +1018,26 @@ class Scenario:
         info["has_challenge_id"] = challenge_id is not None
         if challenge_id:
             self.ctx.record_challenge_id(challenge_id)
+        self.capture = None
         self.answered_at = None  # a new puzzle after an answer means the answer was not final
         self.ctx.event("create_response", info)
         self.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
 
-    def _capture_puzzle(self, challenge_id: str | None) -> None:
-        """Save the puzzle's two images and its geometry. Any failure is recorded, never raised."""
-        self.puzzles += 1
-        n = self.puzzles
+    def _capture_puzzle(
+        self, challenge_id: str | None, *, n: int | None = None, seconds: float | None = None
+    ) -> None:
+        """Save the puzzle's two images and its geometry. Any failure is recorded, never raised.
+
+        The bytes are also kept in `self.capture` for the solver. A retry for the same puzzle
+        passes its `n` and a longer `seconds`.
+        """
+        if n is None:
+            self.puzzles += 1
+            n = self.puzzles
         try:
             info = self._wait_for(
                 lambda: self.driver.execute_script(PUZZLE_INFO_JS, self.puzzle_srcs),
-                self.timeouts.puzzle_images,
+                self.timeouts.puzzle_images if seconds is None else seconds,
                 "puzzle_images",
             )
             srcs = [info["background"]["src"], info["piece"]["src"]]
@@ -860,12 +1046,17 @@ class Scenario:
             if not isinstance(fetched, dict) or "error" in fetched:
                 raise RuntimeError((fetched or {}).get("error", "no result"))
             saved = {}
+            raw: dict[str, bytes] = {}
             for part in ("background", "piece"):
                 data = base64.b64decode(fetched[part]["b64"])
+                raw[part] = data
                 content_type, extension = sniff_image(data, fetched[part]["content_type"])
                 name = f"puzzle-{n}-{part}.{extension}"
                 self.ctx.artifact(name, content_type, data)
                 saved[part] = name
+            self.capture = CapturedPuzzle(
+                n, challenge_id, raw["background"], raw["piece"], self._pixels(info["piece"])
+            )
             self.ctx.event(
                 "puzzle_captured",
                 {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info},
@@ -881,6 +1072,14 @@ class Scenario:
                     "message": message,
                 },
             )
+
+    @staticmethod
+    def _pixels(piece: dict[str, Any]) -> int | None:
+        """The piece's inline `top` (like '60px') as a number, or None."""
+        try:
+            return round(float(str(piece.get("style_top", "")).removesuffix("px")))
+        except ValueError:
+            return None
 
     def _record_browser_signals(self) -> None:
         try:
