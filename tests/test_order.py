@@ -82,8 +82,7 @@ def test_bonus_page_and_markdown_follow_the_same_order(client: TestClient):
         for mode in ("headful", "headless"):
             seed_run(bot=bot, mode=mode)
     md = client.get("/bonus.md").text
-    rows = [line.split("|")[1:3] for line in md.splitlines() if line.startswith("| old")]
-    rows += [line.split("|")[1:3] for line in md.splitlines() if line.startswith("| new")]
+    rows = [line.split("|")[1:3] for line in md.splitlines() if line.startswith(("| old", "| new"))]
     assert [(a.strip(), b.strip()) for a, b in rows] == [
         ("new", "headless"),
         ("new", "headful"),
