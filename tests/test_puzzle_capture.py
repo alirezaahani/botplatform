@@ -58,18 +58,9 @@ def test_a_second_puzzle_after_a_rejected_answer_is_number_two(fake, assisted, p
         "puzzle-2-background.png",
         "puzzle-2-piece.png",
     ]
-    # The order of events pairs each puzzle with the answer that followed it.
-    kinds = [
-        (kind, data.get("n") if kind == "puzzle_captured" else data["request"]["challenge_id"])
-        for kind, data in ctx.events
-        if kind in ("puzzle_captured", "answer_request")
-    ]
-    assert kinds == [
-        ("puzzle_captured", 1),
-        ("answer_request", CHALLENGE_ID),
-        ("puzzle_captured", 2),
-        ("answer_request", SECOND_ID),
-    ]
+    # Each answer pairs with its puzzle by challenge_id, however the polls fall in time.
+    answers = [e["request"]["challenge_id"] for e in ctx.of("answer_request")]
+    assert answers == [e["challenge_id"] for e in events] == [CHALLENGE_ID, SECOND_ID]
 
 
 def test_the_capture_event_comes_before_the_answer_it_belongs_to(fake, run_bot):

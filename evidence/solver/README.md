@@ -15,7 +15,7 @@ Every bot that uses the ARCaptcha scenario (not only `arcaptcha-assisted`) captu
 
 ## Pairing a puzzle with its answer
 
-Events are in order. The `answer_request` events after `puzzle_captured` n and before `puzzle_captured` n+1 belong to puzzle n. The `answer` record is unchanged: `request.answers` is the slider x and `response.success` is the label (true means the position was right).
+Pair an answer with its puzzle by `challenge_id`: `puzzle_captured.challenge_id` equals `answer_request.request.challenge_id`. Do not pair by event order, because a fast answer can be logged before the capture of the same poll. The `answer` record is unchanged: `request.answers` is the slider x and `response.success` is the label (true means the position was right).
 
 ## Making labeled samples from assisted runs
 
