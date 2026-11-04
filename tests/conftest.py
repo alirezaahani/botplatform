@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from sqlalchemy import delete
+from sqlalchemy.orm import sessionmaker
 
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
 from botplatform.contract import BotResult
+from botplatform.db import Base, BotRecord, Run, session_factory
 from tests.fake_demo.server import FakeDemo
 
 USERNAME = "tester@example.com"
@@ -95,3 +98,15 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
         return outcome
 
     return run
+
+
+@pytest.fixture
+def db() -> Iterator[sessionmaker]:
+    """A session factory on an empty database with one bot published."""
+    sessions = session_factory()
+    Base.metadata.create_all(sessions.kw["bind"])
+    with sessions.begin() as session:
+        session.execute(delete(Run))
+        session.execute(delete(BotRecord))
+        session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless"]))
+    yield sessions

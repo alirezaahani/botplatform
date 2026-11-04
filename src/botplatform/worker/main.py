@@ -87,9 +87,14 @@ def run_in_child(
         queue.finish(session, run_id, *outcome)
 
 
+def stop_on_sigterm() -> None:
+    """Turn SIGTERM into SystemExit, so `run_in_child` can clean up before the worker exits."""
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    stop_on_sigterm()
 
     settings = Settings()
     sessions = session_factory()
