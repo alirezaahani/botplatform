@@ -56,5 +56,5 @@ A `solve_attempt` has:
 - `outcome`: `accepted` (an answer and no new puzzle within `answer_settle`), `rejected` (an answer and then a new puzzle), `no_answer` (no answer request arrived), or `gap_not_found` (no drag was made; `target_x` is null). The final judge is still the login: a run is `success`/`solved` only if the login verified.
 - `error` when the drag raised.
 
-To compare finders or movements, group runs by bot id and count the `accepted` attempts over all attempts, and look at `n` of the accepted one. The live results so far are in [results-headful-2x2.md](results-headful-2x2.md), with per-run rows in [runs-headful.json](runs-headful.json).
+To compare finders or movements, group runs by bot id and count the `accepted` attempts over all attempts, and look at `n` of the accepted one. The live results are in [results-headful-2x2.md](results-headful-2x2.md) and [results-headless-2x2.md](results-headless-2x2.md), with per-run rows in [runs-headful.json](runs-headful.json) and [runs-headless.json](runs-headless.json).
 

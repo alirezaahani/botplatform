@@ -118,7 +118,7 @@ Status `success` with reason `human_solved` means a person solved the puzzle. It
 
 ## Solving the slider (the solver bots)
 
-Four automatic bots, all `headful`, with the `all-signals` browser profile. Each is a pair of a gap finder and a movement shape:
+Four automatic bots, in `headful` or `headless` mode (headful uses the `all-signals` browser profile, headless the `all-signals-headless` one). Each is a pair of a gap finder and a movement shape:
 
 | Bot | Finds the gap with | Moves the handle |
 |---|---|---|
@@ -140,13 +140,13 @@ Four automatic bots, all `headful`, with the `all-signals` browser profile. Each
 | `gap_not_found` | `blocked` | The finder found no gap, so the bot made no drag and did not guess. |
 | `puzzle_ready` | `timeout` | The puzzle's images did not load in time. |
 
-Live results, headful, one IP, 2026-11-04: each of the four bots was run 10 times, interleaved, 15 seconds apart. All 40 runs ended `success` / `solved`, all on the first attempt, with a median run of about 16 s. Table and per-run rows: [evidence/solver/results-headful-2x2.md](evidence/solver/results-headful-2x2.md).
+Live results, one IP, 2026-11-04: each of the four bots was run 10 times in each mode, interleaved, 15 seconds apart. All 80 runs (40 headful, 40 headless) ended `success` / `solved`, all on the first attempt, with a median run of about 15 to 16 s. Tables and per-run rows: [headful](evidence/solver/results-headful-2x2.md) and [headless](evidence/solver/results-headless-2x2.md).
 
 Limits, stated plainly:
 
-- 40 of 40 does not mean a 100% success rate: with no failures it only says the failure rate is probably below about 7%. It also does not separate the four bots; neither the finder nor the movement shape changed whether the site accepted the answer.
-- One IP, one evening and headful only. Another network, time of day or mode may differ, and a site that scores movement could change without notice.
-- The 40-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` and waits for each run. The batch runner above works on browser profiles and does not run these bots.
+- 80 of 80 does not mean a 100% success rate: with no failures it only says the failure rate is probably below about 4% over all runs (about 7% per mode). It also does not separate the four bots; neither the finder nor the movement shape changed whether the site accepted the answer.
+- One IP and one evening for both modes. Another network or time of day may differ, and a site that scores movement could change without notice.
+- The 80-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` or `mode=headless` and waits for each run. The batch runner above works on browser profiles and does not run these bots.
 - The solver needs OpenCV, which is installed in the worker image only (the `solver` extra in `pyproject.toml`).
 
 To run one: pick a `arcaptcha-solver-*` bot on `/bots` and press launch. Open the run page to see the timeline: `solve_attempt` holds the finder's answer, the drag and where the handle ended (how to read it: [evidence/solver/README.md](evidence/solver/README.md)). Design reasons: [DECISIONS.md](DECISIONS.md), the solver sections of step 8.
@@ -178,7 +178,7 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-=========== 222 passed, 1 deselected, 1 warning in 293.70s (0:04:53) ===========
+=========== 228 passed, 1 deselected, 1 warning in 307.80s (0:05:07) ===========
 (the deselected test is the live test)
 ```
 
@@ -213,7 +213,7 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases 
 | Drag probe | `tests/test_drag_probe.py` (10 tests): both drag methods alternate, samples show the handle-to-piece ratio, a raising attempt is recorded, the budget and an accepted answer stop the probe | `blocked`, `drag_probe_done` |
 | Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
 | Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
-| Solver bots | `tests/test_solver_bot.py` (10 tests): all four bots solve a real fixture puzzle on the fake page, a wrong first target is rejected and then solved, three rejections end `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
+| Solver bots | `tests/test_solver_bot.py` (16 tests): all four bots solve a real fixture puzzle on the fake page, each mode gets its own browser profile, a headless run uses the headless profile and still solves, a wrong first target is rejected and then solved, three rejections end `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
 
 ## Adding a bot
 
