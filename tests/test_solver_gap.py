@@ -19,7 +19,8 @@ def load(row: dict) -> tuple[bytes, bytes]:
 
 def test_the_manifest_has_the_eight_puzzles():
     assert len(MANIFEST) == 8
-    assert FINDERS == {"cv": find_gap_x_cv}
+    assert set(FINDERS) == {"cv", "silhouette"}
+    assert FINDERS["cv"] is find_gap_x_cv
 
 
 @pytest.mark.parametrize("row", MANIFEST, ids=IDS)
