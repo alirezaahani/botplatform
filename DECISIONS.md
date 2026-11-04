@@ -341,6 +341,12 @@ The README includes real test output. CI runs the tests and a `docker compose up
 
 **Rejected:** saved output only, which shows only what happened on one machine.
 
+**CI smoke run against the live site:** the `stack` job (`.github/scripts/smoke.sh`) starts the stack, launches one run of the example bot and one headless ARCaptcha run, and reads their final status from Postgres. The example bot must end `success`. The ARCaptcha run is accepted as `success`, `blocked` or `failed`, because that outcome depends on ARCaptcha and the runner's IP, not on our code. A `success` or `blocked` run must also have a `challenge_id`.
+
+**Why:** a terminal status with a recorded `challenge_id` shows the whole path works on a clean machine: build, migrations, queue, worker, Chrome, the live request and the database write.
+
+**Cost we accept:** the job needs the live site to be reachable, so an outage on their side can turn CI red. `error` and `timeout` fail the job, because they point to a platform problem (or an unreachable site, which we cannot tell apart from here). A green job does not mean the login succeeded.
+
 ## 8. Delivery plan
 
 ### Build order: a thin end-to-end version first
