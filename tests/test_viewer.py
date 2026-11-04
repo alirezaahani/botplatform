@@ -104,6 +104,23 @@ def test_websocket_carries_bytes_both_ways(client: TestClient) -> None:
         assert socket.receive_bytes() == b"echo:again"
 
 
+def test_websocket_closes_when_the_run_ends(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(live, "VIEWER_RECHECK_SECONDS", 0.1)
+    run_id = make_run()
+    with client.websocket_connect(
+        f"/runs/{run_id}/live/websockify", subprotocols=["binary"]
+    ) as socket:
+        socket.send_bytes(b"hello")
+        assert socket.receive_bytes() == b"echo:hello"
+        with session_factory().begin() as session:
+            session.get(Run, run_id).status = "success"  # type: ignore[union-attr]
+        with pytest.raises(WebSocketDisconnect) as closed:
+            socket.receive_bytes()
+        assert closed.value.code == 1000
+
+
 def test_each_connection_adds_one_viewer_connected_event(client: TestClient) -> None:
     run_id = make_run()
     path = f"/runs/{run_id}/live/websockify"

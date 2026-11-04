@@ -15,6 +15,7 @@ from botplatform.db import Run, RunEvent, session_factory
 from botplatform.web.deps import DbSession
 
 VIEWER_PORT = 6080
+VIEWER_RECHECK_SECONDS = 2.0
 
 router = APIRouter()
 
@@ -84,7 +85,7 @@ async def live_socket(websocket: WebSocket, run_id: uuid.UUID, session: DbSessio
         ) as upstream:
             await websocket.accept(subprotocol=upstream.subprotocol)
             await run_in_threadpool(record_viewer, run_id)
-            await pump(websocket, upstream)
+            await pump(websocket, upstream, run_id)
     except (OSError, websockets.WebSocketException):
         await websocket.close(code=1011)
 
@@ -95,8 +96,14 @@ def record_viewer(run_id: uuid.UUID) -> None:
         session.add(RunEvent(run_id=run_id, type="viewer_connected"))
 
 
-async def pump(browser: WebSocket, worker: websockets.ClientConnection) -> None:
-    """Copy messages both ways until either side closes."""
+def run_is_active(run_id: uuid.UUID) -> bool:
+    with session_factory()() as session:
+        run = session.get(Run, run_id)
+        return run is not None and run.status in ACTIVE_STATUSES
+
+
+async def pump(browser: WebSocket, worker: websockets.ClientConnection, run_id: uuid.UUID) -> None:
+    """Copy messages both ways until either side closes or the run ends."""
 
     async def to_worker() -> None:
         while (message := await browser.receive())["type"] == "websocket.receive":
@@ -109,7 +116,21 @@ async def pump(browser: WebSocket, worker: websockets.ClientConnection) -> None:
             else:
                 await browser.send_text(data)
 
-    tasks = [asyncio.create_task(to_worker()), asyncio.create_task(to_browser())]
-    _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    async def until_run_ends() -> None:
+        # The display belongs to the worker, so the next run would otherwise be watched unwarned.
+        while True:
+            await asyncio.sleep(VIEWER_RECHECK_SECONDS)
+            if not await run_in_threadpool(run_is_active, run_id):
+                return
+
+    tasks = [
+        asyncio.create_task(to_worker()),
+        asyncio.create_task(to_browser()),
+        ending := asyncio.create_task(until_run_ends()),
+    ]
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
         task.cancel()
+    if ending in done:
+        await browser.close(code=1000)
+        await worker.close()

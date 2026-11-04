@@ -270,6 +270,8 @@ Viewers can use the mouse and keyboard in the browser.
 
 **Mitigation:** the proxy adds a `viewer_connected` event, and the run page warns that the result may be human-assisted. This shows a viewer was connected, not whether they did anything. Bonus success rates can exclude these runs.
 
+**Run end:** the proxy closes the connection when the run ends, because the display belongs to the worker and the next run would otherwise be watched without a warning. Cost: a viewer must reconnect for the next run, and the check adds a small DB read every 2 seconds per viewer.
+
 **Rejected:** view only, which rules out debugging by hand.
 
 ### 6c. Reaching a worker: web proxies the viewer
