@@ -26,6 +26,10 @@ web = [
 worker = [
     "selenium>=4.25",
 ]
+# The automatic solver's gap finder (OpenCV without a GUI, plus numpy).
+solver = [
+    "opencv-python-headless>=5.0.0.93",
+]
 
 [dependency-groups]
 dev = [

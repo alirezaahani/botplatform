@@ -54,10 +54,10 @@ RUN apt-get update \
 ENV DISPLAY=:99
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra worker --no-install-project
+    uv sync --frozen --no-dev --extra worker --extra solver --no-install-project
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra worker --no-editable
+    uv sync --frozen --no-dev --extra worker --extra solver --no-editable
 COPY --chmod=755 worker/start.sh /usr/local/bin/start-worker
 USER app
 CMD ["start-worker"]
@@ -71,10 +71,10 @@ RUN apt-get update \
     && mkdir -m 1777 /tmp/.X11-unix
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra worker --extra web --no-install-project
+    uv sync --frozen --extra worker --extra web --extra solver --no-install-project
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra worker --extra web --no-editable
+    uv sync --frozen --extra worker --extra web --extra solver --no-editable
 COPY tests ./tests
 USER app
 CMD ["pytest"]
