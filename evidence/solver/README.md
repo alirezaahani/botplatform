@@ -23,3 +23,20 @@ Pair an answer with its puzzle by `challenge_id`: `puzzle_captured.challenge_id`
 2. For each `puzzle_captured` n, take the next `answer_request`: `answers` is the slider x, `success` says whether it was right.
 3. A sample is (background image, piece image, piece `top`, `answers`). Rows with `success: true` are positive labels. A `false` row only says that x was wrong.
 4. The slider x and the piece's `left` may differ by a scale or offset. Check this with `slider_candidates` and the final piece position before training on it.
+
+## The drag probe experiment (`arcaptcha-drag-probe`)
+
+An experiment, not a solver. Headful, profile `all-signals`. It ticks the checkbox and, if a puzzle appears, makes up to 8 attempts (limit and a 100 s budget are in `StepTimeouts`), one per puzzle. Attempt i uses method `selenium` (ActionChains press, 8 moves, release) when i is even and `cdp` (`Input.dispatchMouseEvent`) when odd, with dx 40, 80, 120, 150, 180, 200, 240, 300 px (the last ones over-travel on purpose). Puzzle n is captured before attempt n's drag. The answer is never read to decide anything, except that `success: true` is recorded and ends the probe. The run always ends `blocked` / `drag_probe_done`, never as a solve. Then the normal login runs, as for every bot.
+
+Events: `drag_probe_started` (plan), `drag_probe_attempt` per attempt, `drag_probe_failed` (type, message; the probe goes on, and stops after two failures in a row), `drag_probe_finished` (`reason`: `plan_finished`, `budget_spent`, `answer_accepted`, `no_answer`, `no_new_puzzle`, `repeated_failures`, `no_puzzle`). The `answer_request` events are recorded as usual.
+
+A `drag_probe_attempt` holds `n`, `challenge_id`, `method`, `dx`, `error`, `outcome` (`next_puzzle`, `no_answer`, `no_new_puzzle`), `samples`, `after_outcome` (state once the answer and next puzzle arrived, so usually the new puzzle) and `listener`. Each sample (`before`, `pressed`, 8 x `step`, `released`; `moved` is the requested px) has `handle`, `piece` and `piece_parent`, each with `rect`, inline `style_left`/`style_transform` and `computed_left`/`computed_transform`.
+
+How to read it:
+
+- Ratio handle to piece: for the `released` sample, (piece `computed_left`) / (handle `computed_left`), or the rect `x` change of each. Check it at several dx, and at the over-travel ones for the clamp of each (about 196 px for the handle was seen).
+- `answers`: pair `answer_request.request.answers` with the attempt by `challenge_id`. Compare it to the piece's final left, the handle's final left, and `dx`. If the handle did not move (`released` equals `before`), the widget ignored that method.
+- Event family: `listener` counts, per event type, `count`, the first 5 `isTrusted` values and the first 3 targets. Mouse, pointer, touch or drag types with counts above zero show what reached the page; this says what the widget could listen to, not what it does. Look at `targets` for the element receiving the press.
+- Trusted: `isTrusted` false for an event type means the browser marked it synthetic. CDP and WebDriver input normally give true.
+
+Not verified against the real site: the selectors `div.draggable` and `img.puzzle`, and whether either method moves the real handle.
