@@ -153,7 +153,7 @@ def test_the_normal_bot_never_drags(probe):
 
 def test_the_probe_bot_is_registered_headful_with_an_honest_description():
     assert ArcaptchaDragProbeBot in BOTS
-    assert BOTS[-1] is ArcaptchaDragProbeBot
+    assert BOTS.index(ArcaptchaDragProbeBot) == len(BOTS) - 3  # the solver bots follow it
     assert ArcaptchaDragProbeBot.id == "arcaptcha-drag-probe"
     assert ArcaptchaDragProbeBot.modes == ["headful"]
     assert ArcaptchaDragProbeBot.profile is ALL_SIGNALS
