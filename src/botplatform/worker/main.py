@@ -20,31 +20,71 @@ from botplatform.worker import queue, registry
 log = logging.getLogger("botplatform.worker")
 
 
-def run_in_child(sessions: sessionmaker, run_id: uuid.UUID, time_limit: int) -> None:
-    """Run one bot in a new process group. At the time limit, kill the whole group."""
-    child = subprocess.Popen(
-        [sys.executable, "-m", "botplatform.worker.child", str(run_id)],
-        start_new_session=True,
-    )
+CHILD_COMMAND = [sys.executable, "-m", "botplatform.worker.child"]
+
+
+def kill_group(child: subprocess.Popen) -> None:
+    """Kill the child's whole process group, which includes its browser."""
     try:
-        exit_code = child.wait(timeout=time_limit)
-    except subprocess.TimeoutExpired:
         os.killpg(child.pid, signal.SIGKILL)
-        child.wait()
-        status, reason, error = (
-            Status.TIMEOUT,
-            "run_time_limit",
-            f"The run exceeded the {time_limit} second limit",
-        )
-    else:
-        # This only takes effect if the child exited without recording a result.
-        status, reason, error = (
-            Status.ERROR,
-            "bot_process_died",
-            f"The bot process exited with code {exit_code} without a result",
-        )
+    except ProcessLookupError:
+        pass
+    child.wait()
+
+
+def run_in_child(
+    sessions: sessionmaker,
+    run_id: uuid.UUID,
+    worker_id: str,
+    settings: Settings,
+    command: list[str] | None = None,
+) -> None:
+    """Run one bot in a new process group, renewing the lease while it runs.
+
+    The group is killed at the time limit, if the lease is lost, or if this worker is stopped.
+    """
+    child = subprocess.Popen([*(command or CHILD_COMMAND), str(run_id)], start_new_session=True)
+    time_limit = settings.run_time_limit_seconds
+    deadline = time.monotonic() + time_limit
+    outcome: tuple[Status, str, str] | None = None
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                outcome = (
+                    Status.TIMEOUT,
+                    "run_time_limit",
+                    f"The run exceeded the {time_limit} second limit",
+                )
+                break
+            try:
+                exit_code = child.wait(timeout=min(settings.lease_renew_seconds, remaining))
+            except subprocess.TimeoutExpired:
+                with sessions.begin() as session:
+                    owned = queue.renew(session, run_id, worker_id, settings.lease_seconds)
+                if not owned:
+                    log.warning("Lost the lease on run %s, killing its process", run_id)
+                    return
+                continue
+            # This only takes effect if the child exited without recording a result.
+            outcome = (
+                Status.ERROR,
+                "bot_process_died",
+                f"The bot process exited with code {exit_code} without a result",
+            )
+            break
+    except BaseException:
+        # SIGTERM raises SystemExit here.
+        kill_group(child)
+        with sessions.begin() as session:
+            queue.finish(
+                session, run_id, Status.ERROR, "worker_stopped", "The worker was stopped"
+            )
+        raise
+    finally:
+        kill_group(child)
     with sessions.begin() as session:
-        queue.finish(session, run_id, status, reason, error)
+        queue.finish(session, run_id, *outcome)
 
 
 def main() -> None:
@@ -62,13 +102,17 @@ def main() -> None:
 
     while True:
         with sessions.begin() as session:
-            run = queue.claim_next(session, worker_id)
+            reaped = queue.reap_expired(session)
+        if reaped:
+            log.warning("Marked runs from lost workers as errors: %s", reaped)
+        with sessions.begin() as session:
+            run = queue.claim_next(session, worker_id, settings.lease_seconds)
             run_id = run.id if run else None
         if run_id is None:
             time.sleep(settings.worker_poll_seconds)
             continue
         log.info("Starting run %s", run_id)
-        run_in_child(sessions, run_id, settings.run_time_limit_seconds)
+        run_in_child(sessions, run_id, worker_id, settings)
         log.info("Finished run %s", run_id)
 
 
