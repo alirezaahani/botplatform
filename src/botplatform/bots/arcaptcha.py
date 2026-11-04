@@ -21,7 +21,7 @@ from botplatform.bots.selenium_support import (
     chrome,
 )
 from botplatform.contract import Bot, BotResult, RunContext, Status
-from botplatform.profiles import BASELINE, PROFILES, Profile, bot_id
+from botplatform.profiles import ALL_SIGNALS, BASELINE, PROFILES, Profile, bot_id
 
 DEMO_URL = "https://demo.arcaptcha.co/"
 CHECKBOX = "#input-checkbox"
@@ -46,6 +46,12 @@ class StepTimeouts:
     more_create_responses: float = 2
     login_response: float = 15
     toast: float = 5
+    # Only for a bot that waits for a person to solve the puzzle. The wait leaves room in the 180 s
+    # run limit for the page load (~8 s) and the login (~10 s). A rejected answer brings a new
+    # puzzle quickly, so if no `create` follows an `answer` within `answer_settle`, we take the
+    # puzzle as finished (a guess the live experiment checks).
+    person_wait: float = 130
+    answer_settle: float = 3
 
 
 DEFAULT_TIMEOUTS = StepTimeouts()
@@ -160,6 +166,7 @@ class ArcaptchaBot(Bot):
     )
     modes: ClassVar[list[str]] = ["headless", "headful"]
     profile: ClassVar[Profile] = BASELINE
+    wait_for_person: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -183,7 +190,14 @@ class ArcaptchaBot(Bot):
         try:
             with chrome(headless=ctx.mode == "headless", profile=self.profile) as driver:
                 scenario = Scenario(
-                    ctx, driver, username, password, self.url, self.timeouts, self.profile
+                    ctx,
+                    driver,
+                    username,
+                    password,
+                    self.url,
+                    self.timeouts,
+                    self.profile,
+                    self.wait_for_person,
                 )
                 return scenario.run()
         except Exception:  # noqa: BLE001 - every failure becomes an error result
@@ -191,6 +205,26 @@ class ArcaptchaBot(Bot):
             host = urlsplit(self.url).hostname or ""
             details = redact(traceback.format_exc(), password, host)
             return BotResult(Status.ERROR, "unhandled_exception", details)
+
+
+class ArcaptchaAssistedBot(ArcaptchaBot):
+    """A diagnostic: does the site accept a correct answer from this browser?
+
+    A person solves the puzzle in the live viewer, so the run is never a bot success. Nothing
+    solves the slider yet, and before building a solver we want to see an accepted answer.
+    """
+
+    id = "arcaptcha-assisted"
+    name = "ARCaptcha demo (a person solves the puzzle)"
+    description = (
+        "A diagnostic, not an automatic bot. Ticks the checkbox like the others, and if the site "
+        "shows a puzzle, waits for a person to solve it in the live viewer (headful only), records "
+        "the answer request and response, then logs in. A verified login ends as success with the "
+        "reason human_solved, because a person did the solving."
+    )
+    modes: ClassVar[list[str]] = ["headful"]
+    profile = ALL_SIGNALS
+    wait_for_person = True
 
 
 def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
@@ -226,9 +260,11 @@ class Scenario:
         url: str = DEMO_URL,
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
         profile: Profile = BASELINE,
+        wait_for_person: bool = False,
     ) -> None:
         self.ctx = ctx
         self.profile = profile
+        self.wait_for_person = wait_for_person
         self.driver = driver
         self.username = username
         self.password = password
@@ -247,6 +283,9 @@ class Scenario:
         )
         self.creates: list[dict[str, Any]] = []
         self.logins: list[CapturedResponse] = []
+        # When the latest `answer` arrived, unless a new `create` followed it.
+        self.answered_at: float | None = None
+        self.person_solved = False
 
     def run(self) -> BotResult:
         try:
@@ -279,6 +318,9 @@ class Scenario:
             return earlier
         self._screenshot("after-login")
         # Both steps found nothing wrong, so this is the only place a run can succeed.
+        if self.person_solved:
+            # Not a bot success: a person did the solving. The reason keeps it out of bot counts.
+            return earlier or verdict or BotResult(Status.SUCCESS, "human_solved")
         return earlier or verdict or BotResult(Status.SUCCESS)
 
     # -- Steps -------------------------------------------------------------------------------
@@ -324,7 +366,37 @@ class Scenario:
                 "not_counted": [r for r in self.watcher.ignored if r["name"] == "create"],
             },
         )
-        return self._classify_create()
+        result = self._classify_create()
+        unsolved = BotResult(Status.BLOCKED, "challenge_unsolved")
+        if self.wait_for_person and result == unsolved and self._types()[-1] == "puzzle":
+            return self._wait_for_person()
+        return result
+
+    def _wait_for_person(self) -> BotResult | None:
+        """Wait while a person solves the puzzle, then go on to the login.
+
+        Every `answer` and later `create` is recorded by `_drain`. The answer's body is never read
+        to decide anything: the login is the judge. Like any step timeout, running out of time
+        ends the run without a login.
+        """
+        wait = self.timeouts.person_wait
+        self.ctx.event(
+            "waiting_for_person",
+            {"seconds": wait, "challenge_id": self.creates[-1]["challenge_id"]},
+        )
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            self._do(self._drain)
+            if self._types()[-1:] != ["puzzle"]:
+                return self._classify_create()  # a block or an accept, handled as usual
+            if (
+                self.answered_at is not None
+                and time.monotonic() - self.answered_at >= self.timeouts.answer_settle
+            ):
+                self.person_solved = True
+                return None
+            time.sleep(POLL_SECONDS)
+        raise StepTimeout("human_wait_expired")
 
     def _log_in(self) -> BotResult | None:
         """Submit the form. Return a failure if the result is not confirmed by both signals."""
@@ -403,6 +475,7 @@ class Scenario:
             if response.name == "login":
                 self.logins.append(response)
             elif response.name == "answer":
+                self.answered_at = time.monotonic()
                 self.ctx.event("answer_request", self._exchange_record(response))
             else:
                 self._handle_create(response)
@@ -428,6 +501,7 @@ class Scenario:
         info["has_challenge_id"] = challenge_id is not None
         if challenge_id:
             self.ctx.record_challenge_id(challenge_id)
+        self.answered_at = None  # a new puzzle after an answer means the answer was not final
         self.ctx.event("create_response", info)
 
     def _record_browser_signals(self) -> None:
@@ -462,8 +536,7 @@ class Scenario:
             return BotResult(
                 Status.ERROR, "create_request_failed", "The create request failed before a response"
             )
-        # A response we could not decode has no type, so only decoded ones decide the outcome.
-        types = [c["captcha_type"] for c in self.creates if c["captcha_type"] is not None]
+        types = self._types()
         if "block" in types:
             return BotResult(Status.BLOCKED, "captcha_blocked")
         if not any(create["challenge_id"] for create in self.creates):
@@ -475,6 +548,10 @@ class Scenario:
             # Never guess: a type we have not seen cannot be treated as an accepted checkbox.
             return BotResult(Status.ERROR, "unknown_captcha_type", f"captcha_type={latest!r}")
         return None
+
+    def _types(self) -> list[str]:
+        """The types of the `create` answers we could decode. Only those decide the outcome."""
+        return [c["captcha_type"] for c in self.creates if c["captcha_type"] is not None]
 
     def _widget_challenge_id(self) -> dict[str, Any]:
         return self._do(lambda: self.driver.execute_script(WIDGET_CHALLENGE_ID_JS)) or {}
