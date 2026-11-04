@@ -394,7 +394,12 @@ def solver_bot(finder: str, mover: str) -> type[ArcaptchaBot]:
     )
 
 
-SOLVER_BOTS: list[type[ArcaptchaBot]] = [solver_bot("cv", "linear"), solver_bot("cv", "eased")]
+SOLVER_BOTS: list[type[ArcaptchaBot]] = [
+    solver_bot("cv", "linear"),
+    solver_bot("cv", "eased"),
+    solver_bot("silhouette", "linear"),
+    solver_bot("silhouette", "eased"),
+]
 
 
 def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
