@@ -64,6 +64,11 @@ CMD ["start-worker"]
 
 # Tests: the worker's browser plus pytest (dev group) and FastAPI for the fake demo page.
 FROM browser AS test
+# Xvfb, so the headful profile tests have a display (the worker image has its own).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends xvfb \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -m 1777 /tmp/.X11-unix
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --extra worker --extra web --no-install-project

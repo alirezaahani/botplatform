@@ -129,3 +129,71 @@ def test_run_survives_a_failed_request_decode(fake, credentials, monkeypatch):
     request = ctx.one("create_request")
     assert request["request"] is None
     assert request["request_raw_length"] > 0
+
+
+# -- Profiles that change what the page sees (measured, not assumed) ---------------------------
+
+SIGNALS_JS = arcaptcha.BROWSER_SIGNALS_JS
+
+
+def page_signals(profile: Profile, fake, headless: bool = True) -> dict:
+    with chrome(headless=headless, profile=profile) as driver:
+        driver.get(fake.url)
+        return driver.execute_async_script(SIGNALS_JS)
+
+
+def test_no_cdc_removes_the_properties_that_baseline_shows(fake):
+    before = page_signals(BASELINE, fake)["automation_properties"]
+    after = page_signals(PROFILES["no-cdc"], fake)["automation_properties"]
+    assert [name for name in before if name.startswith("cdc_")], "baseline should show cdc_"
+    assert not [name for name in after if "cdc_" in name]
+
+
+def test_no_cdc_is_gone_before_page_scripts_and_after_navigation(fake):
+    script = "return Object.getOwnPropertyNames(window).filter(n => /cdc_/.test(n)).length"
+    with chrome(headless=True, profile=PROFILES["no-cdc"]) as driver:
+        driver.get(fake.url)
+        assert driver.execute_script(script) == 0
+        driver.get("data:text/html,<p>other page</p>")
+        assert driver.execute_script(script) == 0
+        driver.execute_script("location.reload()")
+        assert driver.execute_script(script) == 0
+
+
+@pytest.fixture
+def display(monkeypatch):
+    """A virtual display for headful Chrome, like the worker's, on its own number."""
+    import subprocess
+    import time
+    from pathlib import Path
+
+    xvfb = subprocess.Popen(["Xvfb", ":98", "-screen", "0", "1280x800x24", "-nolisten", "tcp"])
+    for _ in range(50):
+        if Path("/tmp/.X11-unix/X98").exists():
+            break
+        time.sleep(0.1)
+    monkeypatch.setenv("DISPLAY", ":98")
+    yield
+    xvfb.terminate()
+    xvfb.wait()
+
+
+def test_webgl_fix_gives_headful_chrome_a_webgl_context(fake, display):
+    before = page_signals(BASELINE, fake, headless=False)["webgl"]
+    after = page_signals(PROFILES["webgl-fix"], fake, headless=False)["webgl"]
+    assert before is None or not before["vendor"]  # the problem the first audit found
+    assert after["vendor"] and after["renderer"]
+
+
+def test_webgl_fix_leaves_headless_as_it_was(fake):
+    before = page_signals(BASELINE, fake)["webgl"]
+    after = page_signals(PROFILES["webgl-fix"], fake)["webgl"]
+    assert before == after
+    assert after["renderer"]
+
+
+def test_webgl_fix_keeps_the_window_size_settings(fake, display):
+    with chrome(headless=False, profile=PROFILES["webgl-fix"]) as driver:
+        driver.get(fake.url)
+        assert driver.execute_script("return screen.width") == 1280
+        assert driver.execute_script("return window.outerWidth") >= 1270
