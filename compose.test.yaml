@@ -1,12 +1,29 @@
 # Bot tests: `docker compose -f compose.test.yaml run --rm tests`
 # Own project name, so it can never touch the main stack's containers or database volume.
-# It needs no .env and no database.
+# It needs no .env. The web tests use the throwaway database below, which has no volume.
 name: botplatform-test
 
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
   tests:
     build:
       context: .
       target: test
     init: true
     shm_size: 1gb
+    environment:
+      DATABASE_URL: postgresql+psycopg://test:test@db:5432/test
+    depends_on:
+      db:
+        condition: service_healthy
