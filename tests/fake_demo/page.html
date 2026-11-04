@@ -74,7 +74,8 @@
         wrapper.style.cssText = 'position:relative;width:260px;height:160px';
         wrapper.innerHTML = '<img src="' + base + 'background" style="width:260px;height:160px">'
           + '<div style="position:absolute;left:0;top:0"><img draggable="true" class="x puzzle" '
-          + 'src="' + base + 'piece" style="position:absolute;left:0px;top:20px;width:40px"></div>';
+          + 'src="' + base + 'piece" style="position:absolute;left:0px;top:' + ((CONFIG.puzzle || {}).top || 20) + 'px;width:'
+          + (CONFIG.puzzle ? 50 : 40) + 'px"></div>';
         popup.appendChild(wrapper);
         if (CONFIG.slider !== null) addSlider(popup, wrapper.querySelector('img.puzzle'));
       }
@@ -83,6 +84,7 @@
 
     // A handle that drags the piece by mouse events: piece left = handle left * CONFIG.slider.
     // The handle stops at 196 px and the piece at 210 px, like the real widget seems to.
+    let ignored = 0;  // presses ignored so far, over the whole page
     function addSlider(popup, piece) {
       const track = document.createElement('div');
       track.style.cssText = 'position:relative;width:260px;height:44px;user-select:none';
@@ -94,6 +96,7 @@
       popup.appendChild(track);
       let startX = null;
       handle.addEventListener('mousedown', (event) => {
+        if (ignored < CONFIG.ignore_presses) { ignored += 1; return; }  // not ready yet
         startX = event.clientX - parseFloat(handle.style.left);
         event.preventDefault();
       });

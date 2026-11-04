@@ -105,6 +105,11 @@ class FakeDemo:
         self.alert_on_click: str | None = None
         self.slider: float | None = None  # a draggable handle; piece left = handle left * this
         self.broken_puzzle_images = False  # the puzzle's image URLs answer 404
+        # A real puzzle for the solver: (background PNG, piece PNG, piece top). With `target` set,
+        # an answer equal to it is accepted (success true) and any other is rejected (false).
+        self.puzzle: tuple[bytes, bytes, int] | None = None
+        self.target: int | None = None
+        self.ignore_presses = 0  # the handle ignores this many presses, like a widget not ready
         self.toast: dict[str, Any] = {"none": False, "kind": None, "text": None}
         self.creates: list[Reply] = [create_reply("accept")]  # the last one repeats
         # What the page's own answer button posts to `answer`. The last reply repeats.
@@ -171,6 +176,8 @@ class FakeDemo:
                 "second_create": self.second_create,
                 "alert_on_click": self.alert_on_click,
                 "slider": self.slider,
+                "puzzle": None if self.puzzle is None else {"top": self.puzzle[2]},
+                "ignore_presses": self.ignore_presses,
                 "toast": self.toast,
             }
             html = PAGE.replace("__CONFIG__", json.dumps(config))
@@ -207,11 +214,18 @@ class FakeDemo:
             if self.broken_puzzle_images:
                 return Response(status_code=404)
             png = PIECE_PNG if part == "piece" else BACKGROUND_PNG
+            if self.puzzle is not None:
+                png = self.puzzle[1] if part == "piece" else self.puzzle[0]
             return Response(png, media_type="image/png")
 
         @app.post("/arcaptcha/api/answer")
         async def answer(request: Request) -> Response:
-            self.answer_requests.append(await request.json())
+            body = await request.json()
+            self.answer_requests.append(body)
+            if self.target is not None:
+                right = body.get("answer") == self.target
+                reply = Reply(json={"status": "OK", "success": right})
+                return await self._respond(reply, obfuscate=True)
             reply = self.answers[min(len(self.answer_requests), len(self.answers)) - 1]
             return await self._respond(reply, obfuscate=True)
 
