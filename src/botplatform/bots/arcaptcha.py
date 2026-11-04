@@ -628,7 +628,12 @@ class Scenario:
             message = str(error).splitlines()[0][:200] if str(error) else ""
             self.ctx.event(
                 "puzzle_capture_failed",
-                {"challenge_id": challenge_id, "n": n, "type": type(error).__name__, "message": message},
+                {
+                    "challenge_id": challenge_id,
+                    "n": n,
+                    "type": type(error).__name__,
+                    "message": message,
+                },
             )
 
     def _record_browser_signals(self) -> None:
