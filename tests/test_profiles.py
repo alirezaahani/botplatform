@@ -256,4 +256,6 @@ def test_all_signals_headless_does_not_change_headful(fake, display):
     plain = page_view(PROFILES["all-signals"], fake, headless=False)
     headless_view = page_view(PROFILES["all-signals-headless"], fake, headless=False)
     assert headless_view == plain
-    assert headless_view["ua"] == HEADFUL_USER_AGENT  # the constant matches what headful really sends
+    assert (
+        headless_view["ua"] == HEADFUL_USER_AGENT
+    )  # the constant matches what headful really sends
