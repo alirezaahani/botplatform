@@ -15,6 +15,7 @@ from botplatform.contract import ACTIVE_STATUSES, Status
 from botplatform.db import BotRecord, Run, RunArtifact, RunEvent
 from botplatform.web import live
 from botplatform.web.deps import DbSession, parse_id
+from botplatform.worker import queue
 
 HERE = Path(__file__).parent
 PAGE_SIZE = 50
@@ -49,8 +50,7 @@ def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) ->
         raise HTTPException(404, f"No active bot '{bot_id}'")
     if mode not in bot.modes:
         raise HTTPException(400, f"'{bot_id}' does not support mode '{mode}'")
-    run = Run(bot_id=bot_id, mode=mode)
-    session.add(run)
+    run = queue.enqueue(session, bot_id, mode)
     session.commit()
     return RedirectResponse(f"/runs/{run.id}", status_code=303)
 

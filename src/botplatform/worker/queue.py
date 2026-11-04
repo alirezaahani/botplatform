@@ -16,6 +16,14 @@ def _lease_end(lease_seconds: int):  # noqa: ANN202 - a SQL expression
     return func.now() + func.make_interval(0, 0, 0, 0, 0, 0, lease_seconds)
 
 
+def enqueue(session: Session, bot_id: str, mode: str) -> Run:
+    """Add a queued run. The web launch endpoint and the batch runner both use this."""
+    run = Run(bot_id=bot_id, mode=mode)
+    session.add(run)
+    session.flush()  # fills in the id
+    return run
+
+
 def claim_next(session: Session, worker_id: str, lease_seconds: int = 30) -> Run | None:
     """Take the oldest queued run. `SKIP LOCKED` stops two workers claiming the same one."""
     run = session.scalar(
