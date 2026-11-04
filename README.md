@@ -182,8 +182,6 @@ Real output of the test command:
 (the deselected test is the live test)
 ```
 
-Known flaky test: `test_a_second_puzzle_after_a_rejected_answer_is_number_two` in `tests/test_puzzle_capture.py` has failed in some full runs and passed alone and in others. A fake person answers a puzzle faster than the bot polls, so the two `create` responses can arrive together and the bot captures only the latest. A real person cannot do that. It is not fixed.
-
 ### What the tests cover
 
 Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases are in the other files. The bonus work adds the rows at the end of the table. Each row lists the status and reason that the test asserts.
