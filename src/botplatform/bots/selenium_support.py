@@ -92,6 +92,9 @@ class CapturedResponse:
     status: int
     body: bytes | None
     body_error: str | None = None
+    # Only filled for matchers opted in with `capture_requests`.
+    request_body: bytes | None = None
+    request_body_error: str | None = None
 
 
 class ResponseWatcher:
@@ -100,12 +103,20 @@ class ResponseWatcher:
     Call `poll()` regularly. Responses come back in the order they finished. Only POST
     requests count: a cross-origin call also logs a CORS preflight for the same URL, which is
     ignored because its method is `OPTIONS` (Chrome 156 gives it the type `Other`). Request
-    bodies are never read or stored, so a password sent in a login request is never captured.
+    bodies are not read unless a matcher's name is in `capture_requests`, so a password sent in a
+    login request is never captured.
     """
 
-    def __init__(self, driver: webdriver.Chrome, matchers: dict[str, Callable[[str], bool]]):
+    def __init__(
+        self,
+        driver: webdriver.Chrome,
+        matchers: dict[str, Callable[[str], bool]],
+        capture_requests: frozenset[str] = frozenset(),
+    ):
         self._driver = driver
         self._matchers = matchers
+        self._capture_requests = capture_requests
+        self._request_bodies: dict[str, bytes] = {}  # request id -> body, for opted-in names
         self._pending: dict[str, tuple[str, str, int]] = {}  # request id -> name, url, status
         self._tracked: dict[str, str] = {}  # request id -> name, for real POST requests
         # Matching requests that were not counted, such as CORS preflights, for the run's record.
@@ -132,6 +143,7 @@ class ResponseWatcher:
                 found.append(self._read_body(request_id, name, url, status))
             elif message["method"] == "Network.loadingFailed":
                 self._pending.pop(request_id, None)
+                self._request_bodies.pop(request_id, None)
                 if request_id in self._tracked:
                     self.failed.append(self._tracked.pop(request_id))
         return found
@@ -144,19 +156,48 @@ class ResponseWatcher:
         if request["method"] == "POST":
             self._tracked[request_id] = name
             self.started.append(name)
+            if name in self._capture_requests:
+                body = self._inline_request_body(request)
+                if body is not None:
+                    self._request_bodies[request_id] = body
         else:
             self.ignored.append(
                 {"name": name, "method": request["method"], "type": params.get("type")}
             )
 
+    @staticmethod
+    def _inline_request_body(request: dict) -> bytes | None:
+        """The body if Chrome put it in the event itself. Large or binary ones are fetched later."""
+        entries = request.get("postDataEntries")
+        if entries and all("bytes" in entry for entry in entries):
+            return b"".join(base64.b64decode(entry["bytes"]) for entry in entries)
+        if isinstance(request.get("postData"), str):
+            return request["postData"].encode("utf-8")
+        return None
+
+    def _read_request_body(self, request_id: str) -> tuple[bytes | None, str | None]:
+        if request_id in self._request_bodies:
+            return self._request_bodies.pop(request_id), None
+        try:
+            result = self._driver.execute_cdp_cmd(
+                "Network.getRequestPostData", {"requestId": request_id}
+            )
+        except WebDriverException as error:
+            return None, f"{type(error).__name__}: {(error.msg or '').splitlines()[0][:200]}"
+        data = result["postData"]
+        return (base64.b64decode(data) if result.get("base64Encoded") else data.encode()), None
+
     def _read_body(self, request_id: str, name: str, url: str, status: int) -> CapturedResponse:
+        request_body, request_error = None, None
+        if name in self._capture_requests:
+            request_body, request_error = self._read_request_body(request_id)
         try:
             result = self._driver.execute_cdp_cmd(
                 "Network.getResponseBody", {"requestId": request_id}
             )
         except WebDriverException as error:
             reason = f"{type(error).__name__}: {(error.msg or '').splitlines()[0][:200]}"
-            return CapturedResponse(name, url, status, None, reason)
+            return CapturedResponse(name, url, status, None, reason, request_body, request_error)
         body = result["body"]
         data = base64.b64decode(body) if result.get("base64Encoded") else body.encode("utf-8")
-        return CapturedResponse(name, url, status, data)
+        return CapturedResponse(name, url, status, data, None, request_body, request_error)
