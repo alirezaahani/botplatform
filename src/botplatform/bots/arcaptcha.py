@@ -102,7 +102,7 @@ class ArcaptchaBot(Bot):
         "Ticks the checkbox on demo.arcaptcha.co, records challenge_id, logs in and checks that "
         "the login really succeeded."
     )
-    modes: ClassVar[list[str]] = ["headless"]
+    modes: ClassVar[list[str]] = ["headless", "headful"]
 
     def __init__(self, url: str = DEMO_URL, timeouts: StepTimeouts = DEFAULT_TIMEOUTS) -> None:
         self.url = url

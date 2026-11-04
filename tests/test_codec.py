@@ -36,5 +36,5 @@ def test_garbage_is_rejected():
 
 
 def test_declared_modes():
-    assert ArcaptchaBot.modes == ["headless"]
+    assert ArcaptchaBot.modes == ["headless", "headful"]
     assert ExampleBot.modes == ["direct"]

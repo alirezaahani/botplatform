@@ -57,6 +57,10 @@ def chrome(*, headless: bool) -> Iterator[webdriver.Chrome]:
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     if headless:
         options.add_argument("--headless=new")
+    else:
+        # Fill the worker's 1280x800 virtual display, which has no window manager.
+        options.add_argument("--window-size=1280,800")
+        options.add_argument("--window-position=0,0")
     # Docker's default seccomp profile blocks Chrome's sandbox. See DECISIONS.md 1a.
     options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(
