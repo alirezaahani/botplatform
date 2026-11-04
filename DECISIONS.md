@@ -128,13 +128,16 @@ The platform owns `queued`, `running`, `success`, `blocked`, `failed`, `timeout`
 | No ID, and no block | `failed` | `missing_challenge_id` |
 | The server returned `block` | `blocked` | `captcha_blocked` |
 | A puzzle appeared and we have no solver | `blocked` | `challenge_unsolved` |
+| A solver bot: the answer was accepted and the login verified | `success` | `solved` |
+| A solver bot: 3 answers in a row were rejected | `blocked` | `solve_failed` |
+| A solver bot: the finder found no gap | `blocked` | `gap_not_found` |
 | A step or the whole run ran out of time | `timeout` | the step name |
 | The `create` or login request failed before any response (dropped connection, refused port) | `error` | `create_request_failed` or `login_request_failed` |
 | A crash or anything else unexpected | `error` | details in the error field |
 
 **Why:** the core stays free of ARCaptcha concepts, and a new bot can add reasons without changing it.
 
-**What counts as `success`:** the login response is HTTP 200, the toast has the success style, and the toast text contains the response's `msg`. Anything else is `verification_failed`. This has not been seen on the live site, because no live run has reached login without a block.
+**What counts as `success`:** the login response is HTTP 200, the toast has the success style, and the toast text contains the response's `msg`. Anything else is `verification_failed`. This has been seen on the live site: every assisted run (7) and every solver run (46) that reached login returned HTTP 200 with the success toast and the matching `msg`.
 
 **Rejected:** a single flat list, because each new bot's failure type would mean editing the core.
 
