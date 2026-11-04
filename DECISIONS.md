@@ -411,6 +411,16 @@ We will start the bonus after step 5, as planned. It must stop by Friday morning
 
 Blocked and failed attempts are reported as they happened, whatever the bonus achieves.
 
+#### Bonus (a): profiles and probe bots
+
+**What:** a `Profile` (`bots/profiles.py`) is a named set of Chrome arguments, dropped Selenium switches and an optional start-up script. `chrome(profile=...)` applies it. There are two now: `baseline` (today's behaviour, nothing added) and `stealth-flags`. Every non-baseline profile gets its own registered bot, `arcaptcha-<profile>`; `arcaptcha` stays the baseline with its old name. Adding a profile is one entry in `PROFILES`. Every ARCaptcha run records `browser_profile` (the settings used), `browser_signals` (what the page can see about the browser) and `create_request` (the decoded `create` request, which carries the signals the server receives, and its response). Nothing is redacted: the demo's credentials are demo/demo.
+
+**Why:** the run history is the evidence store, and a bot's identity is its profile, so comparing profiles is comparing bots' runs, with no new tables or UI. The bots are always registered, with no flag, because hiding them would add a setting and a second code path. The signals are captured for every profile so a block can be compared with what the browser looked like.
+
+**Cost we accept:** more bots in the list. The capture reads `create` request bodies (never login, which holds the password). A failed decode of either body is noted in the event and never fails the run.
+
+**Not verified:** nothing here has run against demo.arcaptcha.co. The tests use the fake page, so they show the mechanism works (flags, script, events), not that any profile reduces blocking. The real request body may arrive in a form Chrome does not put in the network event; the code then falls back to `Network.getRequestPostData`, and records a note if that fails too.
+
 ## Platform support
 
 amd64 only. ARM64 was not considered, and the README states this limitation.
