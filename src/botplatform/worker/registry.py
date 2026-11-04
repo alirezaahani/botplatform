@@ -23,13 +23,17 @@ def validate(bots: list[type[Bot]]) -> None:
 
 
 def publish(session: Session, bots: list[type[Bot]]) -> None:
-    """Upsert every registered bot, and mark the rest inactive."""
-    for bot in bots:
+    """Upsert every registered bot, and mark the rest inactive.
+
+    Removed bots keep their last `position`, so they stay in place in the history.
+    """
+    for position, bot in enumerate(bots):
         values = {
             "name": bot.name,
             "description": bot.description,
             "modes": bot.modes,
             "active": True,
+            "position": position,
         }
         session.execute(
             insert(BotRecord)

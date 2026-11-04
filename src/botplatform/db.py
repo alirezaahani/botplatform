@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Index,
+    Integer,
     LargeBinary,
     String,
     Text,
@@ -39,6 +40,9 @@ class BotRecord(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     modes: Mapped[list[str]] = mapped_column(JSONB)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Index in the `BOTS` list, which is append-only, so a higher number is a newer bot.
+    # `updated_at` cannot say this: every publish rewrites it.
+    position: Mapped[int] = mapped_column(Integer, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
