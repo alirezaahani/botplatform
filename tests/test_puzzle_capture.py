@@ -4,9 +4,12 @@ from dataclasses import replace
 
 from botplatform.contract import Status
 from tests.conftest import FAST
-from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, create_reply
+from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, Reply, create_reply
+from tests.test_assisted import assisted, person  # noqa: F401 - pytest fixtures
 
 SECOND_ID = "999999999999999999999999999999"
+ACCEPTED = Reply(json={"status": "OK", "accepted": True})
+REJECTED = Reply(json={"status": "OK", "accepted": False})
 
 
 def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
@@ -39,19 +42,33 @@ def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
     assert outcome.ctx.of("puzzle_capture_failed") == []
 
 
-def test_a_second_puzzle_is_captured_as_number_two(fake, run_bot):
-    fake.second_create = True
+def test_a_second_puzzle_after_a_rejected_answer_is_number_two(fake, assisted, person):  # noqa: F811
     fake.creates = [create_reply("puzzle"), create_reply("puzzle", challenge_id=SECOND_ID)]
-    outcome = run_bot()
+    fake.answers = [REJECTED, ACCEPTED]
+    person(2)
+    result, ctx = assisted()
 
-    events = outcome.ctx.of("puzzle_captured")
+    assert (result.status, result.reason) == (Status.SUCCESS, "human_solved")
+    events = ctx.of("puzzle_captured")
     assert [(e["n"], e["challenge_id"]) for e in events] == [(1, CHALLENGE_ID), (2, SECOND_ID)]
-    names = [name for name, _, _ in outcome.ctx.artifacts if name.startswith("puzzle-")]
+    names = [name for name, _, _ in ctx.artifacts if name.startswith("puzzle-")]
     assert names == [
         "puzzle-1-background.png",
         "puzzle-1-piece.png",
         "puzzle-2-background.png",
         "puzzle-2-piece.png",
+    ]
+    # The order of events pairs each puzzle with the answer that followed it.
+    kinds = [
+        (kind, data.get("n") if kind == "puzzle_captured" else data["request"]["challenge_id"])
+        for kind, data in ctx.events
+        if kind in ("puzzle_captured", "answer_request")
+    ]
+    assert kinds == [
+        ("puzzle_captured", 1),
+        ("answer_request", CHALLENGE_ID),
+        ("puzzle_captured", 2),
+        ("answer_request", SECOND_ID),
     ]
 
 

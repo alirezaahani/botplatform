@@ -77,9 +77,7 @@ def run_in_child(
         # SIGTERM raises SystemExit here.
         kill_group(child)
         with sessions.begin() as session:
-            queue.finish(
-                session, run_id, Status.ERROR, "worker_stopped", "The worker was stopped"
-            )
+            queue.finish(session, run_id, Status.ERROR, "worker_stopped", "The worker was stopped")
         raise
     finally:
         kill_group(child)

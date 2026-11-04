@@ -376,6 +376,7 @@ class Scenario:
         # When the latest `answer` arrived, unless a new `create` followed it.
         self.answered_at: float | None = None
         self.person_solved = False
+        self.pending_puzzle: tuple[str | None] | None = None  # set by a `create`, taken by `_drain`
         self.puzzles = 0  # puzzles seen so far, captured or not
         self.puzzle_srcs: list[str] = []  # image srcs already taken, to tell a new puzzle apart
 
@@ -572,6 +573,11 @@ class Scenario:
             else:
                 self._handle_create(response)
                 seen_create = True
+        if self.pending_puzzle is not None:
+            # Once per poll, for the latest puzzle: if two `create`s arrive together, the page
+            # shows only the second puzzle, so the first has nothing left to capture.
+            (challenge_id,), self.pending_puzzle = self.pending_puzzle, None
+            self._capture_puzzle(challenge_id)
         return seen_create or bool(self.logins)
 
     def _handle_create(self, response: CapturedResponse) -> None:
@@ -595,8 +601,7 @@ class Scenario:
             self.ctx.record_challenge_id(challenge_id)
         self.answered_at = None  # a new puzzle after an answer means the answer was not final
         self.ctx.event("create_response", info)
-        if info["captcha_type"] == "puzzle":
-            self._capture_puzzle(challenge_id)
+        self.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
 
     def _capture_puzzle(self, challenge_id: str | None) -> None:
         """Save the puzzle's two images and its geometry. Any failure is recorded, never raised."""
