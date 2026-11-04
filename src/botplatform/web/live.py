@@ -39,11 +39,8 @@ def viewer_url(session: Session, run_id: uuid.UUID) -> str:
 
 
 def novnc_page(run_id: uuid.UUID) -> RedirectResponse:
-    """noVNC finds its WebSocket at `path`, so point that at our proxy."""
-    base = f"runs/{run_id}/live"
-    return RedirectResponse(
-        f"/{base}/vnc.html?path={base}/websockify&autoconnect=true&resize=scale"
-    )
+    """noVNC resolves its default `path=websockify` against the page URL, which is our proxy."""
+    return RedirectResponse(f"/runs/{run_id}/live/vnc.html?autoconnect=true&resize=scale")
 
 
 @router.get("/runs/{run_id}/live")

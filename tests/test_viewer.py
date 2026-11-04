@@ -89,7 +89,8 @@ def test_live_redirects_to_novnc_through_the_proxy(client: TestClient) -> None:
     assert response.status_code == 307
     location = response.headers["location"]
     assert location.startswith(f"/runs/{run_id}/live/vnc.html?")
-    assert f"path=runs/{run_id}/live/websockify" in location
+    # noVNC 1.6 resolves `path` against the page URL, so a custom path would double the prefix.
+    assert "path=" not in location
 
 
 def test_websocket_carries_bytes_both_ways(client: TestClient) -> None:
