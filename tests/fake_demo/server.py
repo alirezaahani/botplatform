@@ -103,6 +103,7 @@ class FakeDemo:
         self.checkbox = True
         self.second_create = False  # the page sends a second `create` after the first answer
         self.alert_on_click: str | None = None
+        self.slider: float | None = None  # a draggable handle; piece left = handle left * this
         self.broken_puzzle_images = False  # the puzzle's image URLs answer 404
         self.toast: dict[str, Any] = {"none": False, "kind": None, "text": None}
         self.creates: list[Reply] = [create_reply("accept")]  # the last one repeats
@@ -169,6 +170,7 @@ class FakeDemo:
                 "api_origin": self.api_origin,
                 "second_create": self.second_create,
                 "alert_on_click": self.alert_on_click,
+                "slider": self.slider,
                 "toast": self.toast,
             }
             html = PAGE.replace("__CONFIG__", json.dumps(config))

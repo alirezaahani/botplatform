@@ -66,7 +66,7 @@
         solve.type = 'button';
         solve.dataset.cid = challengeId;
         solve.textContent = 'solve';
-        solve.addEventListener('click', sendAnswer);
+        solve.addEventListener('click', () => sendAnswer());
         popup.appendChild(solve);
         // Like the real widget: a background image and, in an absolutely positioned div, the piece.
         const base = CONFIG.api_origin + '/arcaptcha/api/puzzles/' + challengeId + '/undefined/';
@@ -76,11 +76,41 @@
           + '<div style="position:absolute;left:0;top:0"><img draggable="true" class="x puzzle" '
           + 'src="' + base + 'piece" style="position:absolute;left:0px;top:20px;width:40px"></div>';
         popup.appendChild(wrapper);
+        if (CONFIG.slider !== null) addSlider(popup, wrapper.querySelector('img.puzzle'));
       }
       document.body.appendChild(popup);
     }
 
-    function sendAnswer() {
+    // A handle that drags the piece by mouse events: piece left = handle left * CONFIG.slider.
+    // The handle stops at 196 px and the piece at 210 px, like the real widget seems to.
+    function addSlider(popup, piece) {
+      const track = document.createElement('div');
+      track.style.cssText = 'position:relative;width:260px;height:44px;user-select:none';
+      const handle = document.createElement('div');
+      handle.className = 'tw-absolute tw-rounded-full tw-w-16 tw-h-10 tw-left-0 tw-bottom-1 draggable';
+      handle.style.cssText = 'position:absolute;left:0px;top:2px;width:64px;height:40px;'
+        + 'border-radius:20px;background:#39c';
+      track.appendChild(handle);
+      popup.appendChild(track);
+      let startX = null;
+      handle.addEventListener('mousedown', (event) => {
+        startX = event.clientX - parseFloat(handle.style.left);
+        event.preventDefault();
+      });
+      document.addEventListener('mousemove', (event) => {
+        if (startX === null) return;
+        const left = Math.max(0, Math.min(196, event.clientX - startX));
+        handle.style.left = left + 'px';
+        piece.style.left = Math.min(210, left * CONFIG.slider) + 'px';
+      });
+      document.addEventListener('mouseup', () => {
+        if (startX === null) return;
+        startX = null;
+        sendAnswer(Math.round(parseFloat(piece.style.left)));
+      });
+    }
+
+    function sendAnswer(position) {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', CONFIG.api_origin + '/arcaptcha/api/answer');
       xhr.setRequestHeader('Content-Type', 'application/json');
@@ -88,9 +118,9 @@
       xhr.onload = () => {
         let data = {};
         try { data = decode(xhr.response); } catch (error) { /* unreadable: the page stays put */ }
-        if (data.accepted === false) sendCreate();  // a rejected answer brings a new puzzle
+        if (data.accepted === false || data.success === false) sendCreate();  // a rejected answer brings a new puzzle
       };
-      xhr.send(JSON.stringify({challenge_id: challengeId, answer: 42}));
+      xhr.send(JSON.stringify({challenge_id: challengeId, answer: typeof position === 'number' ? position : 42}));
     }
 
     function handleCreate(status, buffer) {
