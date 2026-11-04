@@ -36,4 +36,25 @@ STEALTH_FLAGS = Profile(
     excluded_switches=("enable-automation",),
 )
 
-PROFILES: dict[str, Profile] = {p.name: p for p in (BASELINE, STEALTH_FLAGS)}
+# chromedriver adds `cdc_adoQpoasnfa76pfcZLmcfl_*` properties to `window` before page scripts run,
+# and the site's WindowCDC check lists them. They are plain, configurable properties, so deleting
+# them from a script that runs first is enough (measured, see DECISIONS.md Bonus (b)).
+NO_CDC = Profile(
+    "no-cdc",
+    "Deletes chromedriver's cdc_ properties from the page before its scripts run, because the "
+    "site's WindowCDC check lists them and the first audit found them in every run.",
+    init_script="for (const name of Object.getOwnPropertyNames(window)) {"
+    " if (/^\\$?cdc_/.test(name)) delete window[name]; }",
+)
+
+# Headful Chrome in the worker's Xvfb has no GPU, and without this flag it gives the page no WebGL
+# context at all. With it, it uses the same SwiftShader software renderer that headless Chrome
+# already uses. Smallest working set of the flags tried, see DECISIONS.md Bonus (b).
+WEBGL_FIX = Profile(
+    "webgl-fix",
+    "Lets headful Chrome use the SwiftShader software renderer, so the page gets a WebGL context "
+    "with a vendor and renderer. The first audit found none in headful runs. No effect on headless.",
+    args=("--enable-unsafe-swiftshader",),
+)
+
+PROFILES: dict[str, Profile] = {p.name: p for p in (BASELINE, STEALTH_FLAGS, NO_CDC, WEBGL_FIX)}
