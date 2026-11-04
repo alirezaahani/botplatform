@@ -8,10 +8,10 @@ Every bot that uses the ARCaptcha scenario (not only `arcaptcha-assisted`) captu
 - A `puzzle_captured` event with: `challenge_id` (of the latest `create`), `n`, the artifact names, and for each image its `src`, `natural_width`/`natural_height` and on-screen `rect`. The piece also has its inline `style_left`/`style_top` and `computed_left`/`computed_top`. The event also holds `wrapper_rect` (the background's parent), `piece_parent_rect`, `slider_candidates` and `device_pixel_ratio`.
 - If the images do not load in time or the fetch fails, a `puzzle_capture_failed` event with `challenge_id`, `n` and the error type.
 
-## Not verified against the real site
+## Selectors, as found on the live site
 
-- The piece is found as `img.puzzle`, the background as the other `img` whose `src` contains `/puzzles/`. Both come from the DOM seen by hand, not from a captured run.
-- The slider's selectors are unknown. `slider_candidates` lists up to 10 elements whose class name contains `slider`, `handle`, `track` or `drag`, with their rects. Read it from the first live run and replace it with real selectors.
+- The piece is `img.puzzle` and the background is the other `img` whose `src` contains `/puzzles/`. Both were captured in live runs.
+- The slider handle is `div.draggable` (64x40 px, starts at `left: 0` under the 260x160 image). `slider_candidates` found it in every live capture. The press lands on the arrow element inside it.
 
 ## Pairing a puzzle with its answer
 
@@ -22,7 +22,7 @@ Pair an answer with its puzzle by `challenge_id`: `puzzle_captured.challenge_id`
 1. Run `arcaptcha-assisted` and solve the slider by hand.
 2. For each `puzzle_captured` n, take the next `answer_request`: `answers` is the slider x, `success` says whether it was right.
 3. A sample is (background image, piece image, piece `top`, `answers`). Rows with `success: true` are positive labels. A `false` row only says that x was wrong.
-4. The slider x and the piece's `left` may differ by a scale or offset. Check this with `slider_candidates` and the final piece position before training on it.
+4. The slider x, the handle's `left` and the piece's `left` are the same number (1:1, no scale or offset), so `answers` can be used directly. The handle stops at 196 px.
 
 ## The drag probe experiment (`arcaptcha-drag-probe`)
 
@@ -39,7 +39,7 @@ How to read it:
 - Event family: `listener` counts, per event type, `count`, the first 5 `isTrusted` values and the first 3 targets. Mouse, pointer, touch or drag types with counts above zero show what reached the page; this says what the widget could listen to, not what it does. Look at `targets` for the element receiving the press.
 - Trusted: `isTrusted` false for an event type means the browser marked it synthetic. CDP and WebDriver input normally give true.
 
-Not verified against the real site: the selectors `div.draggable` and `img.puzzle`, and whether either method moves the real handle.
+Live results (2026-11-04): both methods moved the real handle, the handle's and the piece's `left` always matched `dx` exactly up to a clamp at 196 px, and the widget listens to mouse and pointer events (both `isTrusted: true`) on the arrow element inside the handle. Three drags that landed exactly on the gap were accepted (one Selenium, two CDP) and every drag 10 px or more away was rejected.
 
 ## Reading `solve_attempt` events (`arcaptcha-solver-<finder>-<mover>`)
 
@@ -56,5 +56,5 @@ A `solve_attempt` has:
 - `outcome`: `accepted` (an answer and no new puzzle within `answer_settle`), `rejected` (an answer and then a new puzzle), `no_answer` (no answer request arrived), or `gap_not_found` (no drag was made; `target_x` is null). The final judge is still the login: a run is `success`/`solved` only if the login verified.
 - `error` when the drag raised.
 
-To compare finders or movements, group runs by bot id and count the `accepted` attempts over all attempts, and look at `n` of the accepted one. Not verified on the real site.
+To compare finders or movements, group runs by bot id and count the `accepted` attempts over all attempts, and look at `n` of the accepted one. The live results so far are in [results-headful-2x2.md](results-headful-2x2.md), with per-run rows in [runs-headful.json](runs-headful.json).
 

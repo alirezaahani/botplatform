@@ -484,7 +484,7 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Rejected alternative:** rebuilding each background by taking the per-pixel mode over about 100 samples per background type and subtracting it. It is simpler, but fragile (it breaks with any new background) and needs reference data shipped with the code.
 
-**Not verified:** nothing has run on the live site. The fake demo accepts an answer equal to a known target, so tests show our own logic, not that the real site accepts these paths.
+**Live result:** the `cv` bots solved 16 of 16 live runs on attempt 1 (6 in a smoke batch, 10 in the comparison below). The fake demo accepts an answer equal to a known target, so the tests show our own logic; the live runs are what show the site accepts these paths. See the next section and `evidence/solver/results-headful-2x2.md`.
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
@@ -513,7 +513,9 @@ Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv
 
 **Known limits:** the fixtures are only 8 puzzles, and the `cv_target` is the other finder's answer, not the site's, so agreement shows consistency, not correctness. The method relies on the halo being brighter than the gap interior; a background with a very bright interior, or a gap whose halo is lost in a bright area, could fail or pick another place, and it would then rather answer wrongly with a high score than raise. It needs the piece's row and alpha to be right (a piece with no alpha or a row outside the image raises `GapNotFound`). The accepted tolerance of the site is under 10 px; this finder is exact on the fixtures, but that is the same data the method was chosen on.
 
-**Not verified:** nothing has run on the live site. The fake demo only checks that the answer equals a known target for one fixture.
+**Live results (headful, 2026-11-04):** the 2x2 was run interleaved, 10 rounds of the four bots, 40 runs in all. Every run ended `success` / `solved` and every run was solved on attempt 1: 10 of 10 for each of `cv-linear`, `cv-eased`, `silhouette-linear` and `silhouette-eased`. Median run 15.7 to 16.0 s; drag time 0.6 s (linear) against about 1.2 s (eased). The runs covered 13 different gap positions. Table, method and per-run rows: `evidence/solver/results-headful-2x2.md` and `runs-headful.json`.
+
+**What the comparison can and cannot say:** both finders are accepted by the site, so the silhouette method is a valid independent second method. Neither finder nor movement shape changed acceptance. With no failures in 40 runs, the true failure rate is only bounded (probably below about 7%), and the four bots cannot be ranked. One IP, one evening and headful only: another IP, time of day or mode may differ. The fake demo checks only that the answer equals a known target for one fixture.
 
 ## Platform support
 
