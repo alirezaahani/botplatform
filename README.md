@@ -9,8 +9,11 @@ browser --> web --> Postgres <-- worker(s)
 
 ## Requirements
 
-- Docker with the Compose plugin.
-- An amd64 machine. ARM64 is a limitation: it is not supported and has not been tried.
+- Docker Engine with the Compose plugin, on Linux with an amd64 CPU. This is what was tested: development on an Ubuntu-like Linux host, and CI on GitHub's `ubuntu-latest` runner.
+- Docker Desktop on macOS or Windows with an amd64 CPU is untested. It may work, but nothing in this repo checks it.
+- ARM64 is a limitation: it is not supported and has not been tried.
+- Internet access. The image build downloads Chrome for Testing, and the `arcaptcha` bot reaches the ARCaptcha demo site at run time.
+- Each worker container asks for 1 GB of shared memory (`shm_size` in `compose.yaml`) for Chrome. Other disk and RAM needs were not measured.
 
 ## Quick start
 
