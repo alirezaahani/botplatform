@@ -14,6 +14,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha_codec import decode_body
+from botplatform.bots.profiles import BASELINE, PROFILES, Profile
 from botplatform.bots.selenium_support import (
     CapturedResponse,
     ResponseWatcher,
@@ -87,6 +88,61 @@ def redact(text: str, password: str, keep: str) -> str:
     return keep.join(part.replace(password, "[password]") for part in text.split(keep))
 
 
+# What the site could learn about the browser, stored as is. The demo's credentials are public,
+# and these values are the evidence for which profile helps. It is async because of the
+# permissions query, so it ends by calling the callback that `execute_async_script` provides.
+BROWSER_SIGNALS_JS = """
+const done = arguments[arguments.length - 1];
+const attempt = (read) => {
+  try { return read(); } catch (error) { return {error: String(error)}; }
+};
+const webgl = attempt(() => {
+  const gl = document.createElement('canvas').getContext('webgl');
+  if (!gl) return null;
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  if (!info) return {vendor: null, renderer: null};
+  return {
+    vendor: gl.getParameter(info.UNMASKED_VENDOR_WEBGL),
+    renderer: gl.getParameter(info.UNMASKED_RENDERER_WEBGL)
+  };
+});
+const signals = {
+  webdriver: navigator.webdriver,
+  user_agent: navigator.userAgent,
+  platform: navigator.platform,
+  languages: Array.from(navigator.languages || []),
+  plugins: navigator.plugins.length,
+  mime_types: navigator.mimeTypes.length,
+  hardware_concurrency: navigator.hardwareConcurrency,
+  device_memory: navigator.deviceMemory === undefined ? null : navigator.deviceMemory,
+  chrome: {
+    present: typeof window.chrome !== 'undefined',
+    runtime: !!(window.chrome && window.chrome.runtime),
+    csi: !!(window.chrome && window.chrome.csi)
+  },
+  window: {
+    outer_width: window.outerWidth, outer_height: window.outerHeight,
+    inner_width: window.innerWidth, inner_height: window.innerHeight
+  },
+  screen: {width: screen.width, height: screen.height},
+  notification_permission: typeof Notification === 'undefined' ? null : Notification.permission,
+  webgl: webgl,
+  automation_properties: attempt(() => Object.getOwnPropertyNames(window).filter(
+    (name) => /^\\$?cdc_/.test(name) || /selenium|webdriver/i.test(name)
+  ))
+};
+if (!navigator.permissions || !navigator.permissions.query) {
+  signals.permissions_notifications = null;
+  done(signals);
+} else {
+  navigator.permissions.query({name: 'notifications'}).then(
+    (status) => { signals.permissions_notifications = status.state; done(signals); },
+    (error) => { signals.permissions_notifications = {error: String(error)}; done(signals); }
+  );
+}
+"""
+
+
 class StepTimeout(Exception):
     """A step ran out of time. `step` becomes the run's reason."""
 
@@ -103,10 +159,17 @@ class ArcaptchaBot(Bot):
         "the login really succeeded."
     )
     modes: ClassVar[list[str]] = ["headless", "headful"]
+    profile: ClassVar[Profile] = BASELINE
 
-    def __init__(self, url: str = DEMO_URL, timeouts: StepTimeouts = DEFAULT_TIMEOUTS) -> None:
+    def __init__(
+        self,
+        url: str = DEMO_URL,
+        timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
+        profile: Profile | None = None,
+    ) -> None:
         self.url = url
         self.timeouts = timeouts
+        self.profile = profile or type(self).profile
 
     def run(self, ctx: RunContext) -> BotResult:
         username = os.environ.get("ARCAPTCHA_USERNAME")
@@ -118,13 +181,39 @@ class ArcaptchaBot(Bot):
                 "Set ARCAPTCHA_USERNAME and ARCAPTCHA_PASSWORD in .env",
             )
         try:
-            with chrome(headless=ctx.mode == "headless") as driver:
-                return Scenario(ctx, driver, username, password, self.url, self.timeouts).run()
+            with chrome(headless=ctx.mode == "headless", profile=self.profile) as driver:
+                scenario = Scenario(
+                    ctx, driver, username, password, self.url, self.timeouts, self.profile
+                )
+                return scenario.run()
         except Exception:  # noqa: BLE001 - every failure becomes an error result
             # The password must never reach the run's error field, whatever the exception says.
             host = urlsplit(self.url).hostname or ""
             details = redact(traceback.format_exc(), password, host)
             return BotResult(Status.ERROR, "unhandled_exception", details)
+
+
+def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
+    """A bot class that runs the ARCaptcha scenario with `profile`, as `arcaptcha-<name>`.
+
+    One bot per profile makes the run history the evidence: a bot's runs are one profile's runs.
+    """
+    return type(
+        "Arcaptcha" + profile.name.title().replace("-", "") + "Bot",
+        (ArcaptchaBot,),
+        {
+            "id": f"arcaptcha-{profile.name}",
+            "name": f"ARCaptcha demo (Selenium, {profile.name})",
+            "description": f"{ArcaptchaBot.description} Browser profile: {profile.description}",
+            "profile": profile,
+        },
+    )
+
+
+# The baseline is `ArcaptchaBot` itself, so its id, name and description stay as they were.
+PROFILE_BOTS: list[type[ArcaptchaBot]] = [
+    profile_bot(p) for p in PROFILES.values() if p.name != BASELINE.name
+]
 
 
 class Scenario:
@@ -136,8 +225,10 @@ class Scenario:
         password: str,
         url: str = DEMO_URL,
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
+        profile: Profile = BASELINE,
     ) -> None:
         self.ctx = ctx
+        self.profile = profile
         self.driver = driver
         self.username = username
         self.password = password
@@ -149,6 +240,8 @@ class Scenario:
                 "create": lambda url: url.split("?")[0].endswith("/api/create"),
                 "login": lambda url: url.split("?")[0].endswith("/api/login"),
             },
+            # Only `create`: its request carries the browser signals. Login holds the password.
+            capture_requests=frozenset({"create"}),
         )
         self.creates: list[dict[str, Any]] = []
         self.logins: list[CapturedResponse] = []
@@ -164,6 +257,7 @@ class Scenario:
             raise
 
     def _run(self) -> BotResult:
+        self.ctx.event("browser_profile", self.profile.settings())
         earlier = self._open_and_tick()
         self._screenshot("after-click")
         # Decision 3b: the login is always attempted, but it can never upgrade an earlier failure.
@@ -196,6 +290,7 @@ class Scenario:
         except TimeoutException:
             raise StepTimeout("load_page") from None
         self.ctx.event("page_loaded", {"iframes": len(driver.find_elements(By.TAG_NAME, "iframe"))})
+        self._record_browser_signals()
         self._wait_for(
             lambda: driver.find_elements(By.CSS_SELECTOR, CHECKBOX),
             self.timeouts.find_checkbox,
@@ -324,11 +419,39 @@ class Scenario:
                 info["decode_error"] = type(error).__name__
         if not isinstance(challenge_id, str) or not challenge_id:
             challenge_id = None
+        self.ctx.event("create_request", self._create_request_record(response))
         self.creates.append({"captcha_type": info["captcha_type"], "challenge_id": challenge_id})
         info["has_challenge_id"] = challenge_id is not None
         if challenge_id:
             self.ctx.record_challenge_id(challenge_id)
         self.ctx.event("create_response", info)
+
+    def _record_browser_signals(self) -> None:
+        try:
+            signals = self._do(lambda: self.driver.execute_async_script(BROWSER_SIGNALS_JS))
+        except Exception as error:  # noqa: BLE001 - evidence gathering must not change the result
+            signals = {"error": f"{type(error).__name__}: {str(error).splitlines()[0][:200]}"}
+        self.ctx.event("browser_signals", signals if isinstance(signals, dict) else {})
+
+    @staticmethod
+    def _create_request_record(response: CapturedResponse) -> dict[str, Any]:
+        """The decoded `create` request (it holds the browser signals sent) and response."""
+        record: dict[str, Any] = {"http_status": response.status}
+        for side, data, error in (
+            ("request", response.request_body, response.request_body_error),
+            ("response", response.body, response.body_error),
+        ):
+            if data is None:
+                record[side] = None
+                record[f"{side}_note"] = f"no body: {error}"
+                continue
+            try:
+                record[side] = decode_body(data)
+            except Exception as failure:  # noqa: BLE001 - a failed decode must not crash a run
+                record[side] = None
+                record[f"{side}_note"] = f"decode failed: {type(failure).__name__}"
+                record[f"{side}_raw_length"] = len(data)
+        return record
 
     def _classify_create(self) -> BotResult | None:
         if not self.creates and "create" in self.watcher.failed:
