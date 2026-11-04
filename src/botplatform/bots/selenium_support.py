@@ -15,6 +15,8 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.chrome.service import Service
 
+from botplatform.bots.profiles import BASELINE, Profile
+
 
 def call_handling_alerts[T](
     driver: webdriver.Chrome,
@@ -45,11 +47,12 @@ def call_handling_alerts[T](
 
 
 @contextmanager
-def chrome(*, headless: bool) -> Iterator[webdriver.Chrome]:
+def chrome(*, headless: bool, profile: Profile = BASELINE) -> Iterator[webdriver.Chrome]:
     """Start the pinned Chrome for Testing, and always quit it.
 
     The worker image sets `CHROME_BINARY` and `CHROMEDRIVER_BINARY`. Passing the driver path
     explicitly means Selenium Manager never looks for, or downloads, a browser or driver.
+    The `profile` adds its own arguments, dropped switches and start-up script on top.
     """
     options = webdriver.ChromeOptions()
     options.binary_location = os.environ["CHROME_BINARY"]
@@ -63,10 +66,18 @@ def chrome(*, headless: bool) -> Iterator[webdriver.Chrome]:
         options.add_argument("--window-position=0,0")
     # Docker's default seccomp profile blocks Chrome's sandbox. See DECISIONS.md 1a.
     options.add_argument("--no-sandbox")
+    for argument in profile.args:
+        options.add_argument(argument)
+    if profile.excluded_switches:
+        options.add_experimental_option("excludeSwitches", list(profile.excluded_switches))
     driver = webdriver.Chrome(
         options=options, service=Service(executable_path=os.environ["CHROMEDRIVER_BINARY"])
     )
     try:
+        if profile.init_script:
+            driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument", {"source": profile.init_script}
+            )
         yield driver
     finally:
         driver.quit()
