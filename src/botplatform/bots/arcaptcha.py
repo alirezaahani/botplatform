@@ -620,6 +620,13 @@ class Scenario:
             samples.append(data)
             return data
 
+        # CDP mouse events use viewport coordinates and hit whatever is there, so the handle must
+        # be on screen (Selenium's move_to_element scrolls by itself).
+        self._do(
+            lambda: driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'})", handle
+            )
+        )
         start = sample("before", 0)
         targets = [round(dx * i / drag_probe.STEPS) for i in range(1, drag_probe.STEPS + 1)]
         if method == "selenium":
