@@ -149,3 +149,11 @@ docker compose down -v    # also deletes the database volume
 - `permission denied` from Docker: add your user to the `docker` group (`sudo usermod -aG docker $USER`), then log in again.
 - Port 8000 is in use: set `WEB_PORT` in `.env`.
 - The first build is slow: it downloads Chrome for Testing. Later builds reuse the cached layers.
+- `set it in .env` from Compose: `.env` is missing or a required value is empty. Run `cp .env.example .env`.
+- A password with special characters breaks the database connection: it is placed in a connection URL. Use letters and numbers only, then run `docker compose down -v` once, because Postgres keeps the password it first started with.
+- A run ends `blocked`: the site refused the bot or showed a puzzle (`captcha_blocked`, `challenge_unsolved`). This is a recorded result, not a bug. The `challenge_id` is kept on the run page.
+- A new bot is not on `/bots`: the worker publishes the list at startup. Run `docker compose up -d --build worker`.
+- A run stays `queued`: no worker is running. The run page says so. Check with `docker compose ps`.
+- No "Watch live" link: it only shows for `headful` runs that are queued or running and that a worker has picked up (`can_watch` in `src/botplatform/web/app.py`). Headless and finished runs have none.
+- A run ends `timeout`: a step took too long (the reason names the step), or the whole run passed `RUN_TIME_LIMIT_SECONDS` (reason `run_time_limit`). Raise the limit in `.env`.
+- To read logs, run `docker compose logs worker` (or `web`, `db`). Add `-f` to follow.
