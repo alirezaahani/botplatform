@@ -421,6 +421,27 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Not verified:** nothing here has run against demo.arcaptcha.co. The tests use the fake page, so they show the mechanism works (flags, script, events), not that any profile reduces blocking. The real request body may arrive in a form Chrome does not put in the network event; the code then falls back to `Network.getRequestPostData`, and records a note if that fails too.
 
+#### Bonus (b): two profiles, a batch runner and a report page
+
+**What:**
+
+- **`no-cdc`** runs an `init_script` that deletes chromedriver's `cdc_` properties from `window` before page scripts run. **`webgl-fix`** adds `--enable-unsafe-swiftshader`, so headful Chrome gets a WebGL context. Each is one change from the baseline; a combined profile comes after measuring.
+- **Batch runner:** `docker compose run --rm web python -m botplatform.batch --profiles baseline,no-cdc --modes headless --runs 10` (also `--pause`, `--jitter`, `--run-timeout`, `--stop-after`, `--seed`). It queues runs with `queue.enqueue`, the same code the launch endpoint uses, waits for each, prints one line and pauses. The order of all (bot, mode) runs is shuffled, and the seed is printed so an order can be repeated. A combination that is blocked with `captcha_blocked` 5 times in a row is skipped for the rest of the batch (`--stop-after 0` turns this off); its finished runs still count. Ctrl-C prints a summary; a run already queued is left to the worker.
+- **Report:** `/bonus` (and `/bonus.md`, generated Markdown with the same `?since=` and `?bot=` filters) shows per bot and mode the outcomes, the `create` captcha types, the not-blocked count with a 95% Wilson interval, runs with a challenge ID and successes. Runs with a `viewer_connected` event are left out of the numbers and counted in the header.
+
+**Why:** probing goes through the platform, so a batch run is an ordinary run and the history is the evidence store. No new tables or migrations. Pauses are short (10s plus up to 5s) because a run takes about 12s, so the whole batch is quick. The order is shuffled so that time of day or a drifting IP reputation cannot favour one profile. The early stop saves runs and goodwill when a profile is plainly still blocked.
+
+**"Not blocked"** means the first `create` response had a captcha type other than `block`. The rate divides by the runs whose first `create` response had a type. Runs with no answer count in the table but not in the rate, so a crashed run is not read as a block or as a pass.
+
+**What I measured (Chrome 156.0.8078.80 in the worker image, no run against the real site):**
+
+- *no-cdc:* the seven `cdc_adoQpoasnfa76pfcZLmcfl_*` properties exist on `window` before page scripts run. They are plain, writable, configurable properties, and the init script (which runs after chromedriver sets them and before the page) removes all seven. They stay gone through a reload and a new navigation, and a later `execute_script` does not bring them back. So the patched chromedriver fallback was not needed. Before: 7 properties; after: 0, both in the page's own early script and in `browser_signals.automation_properties`.
+- *webgl-fix:* headful, baseline: `getContext('webgl')` is null. These flags were tried alone, headful: `--enable-unsafe-swiftshader`, `--use-angle=swiftshader` and `--use-gl=angle --use-angle=swiftshader` each give vendor `Google Inc. (Google)` and renderer `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)...`, the same as headless. `--ignore-gpu-blocklist` gives a Mesa llvmpipe renderer instead. `--enable-webgl` and `--in-process-gpu` change nothing. We use `--enable-unsafe-swiftshader`, the smallest set that works. Headless is unchanged by it.
+
+**Cost we accept:** a batch of 80 runs takes about 20 minutes. Batch runs fill the history, and the report is the only place that separates them from other runs. A SwiftShader WebGL is still a software renderer, which a detector may know.
+
+**Not verified:** nothing has run against demo.arcaptcha.co, so we do not know that either profile lowers the block rate. The init script removes the properties from the page's `window`; we have not checked that the site reads no other trace of chromedriver (for example on `document`). The batch end-to-end test uses a stand-in worker that finishes runs in the database, not Chrome. The report page has only been tested against seeded runs.
+
 ## Platform support
 
 amd64 only. ARM64 was not considered, and the README states this limitation.
