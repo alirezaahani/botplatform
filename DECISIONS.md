@@ -10,9 +10,21 @@ The web container serves the UI and adds runs to a queue table. The worker takes
 - The execution layer is separate at runtime, not only in the code.
 - Chrome stays under the bot's direct control, so the bot can use CDP to read the `create` response. That is the only place we have found `challenge_id` on a blocked run.
 - A database table is enough of a queue at this scale, so Redis and Celery are not needed.
+- The database already holds the run status, results and history. A broker would keep a second copy of that state, and the two could disagree after a crash, for example a job acked in Redis but never recorded in the database.
+- A run opens a real Chrome and takes seconds to minutes, so volume is at most a few claims per second. A poll every second (`worker_poll_seconds`) costs nothing at that rate, and a broker's low-latency delivery would not help.
+- The queue is a table, so "what is waiting?" is a plain SQL query, and the UI uses it for the "Still queued" hint. Runs are durable rows, so there are no broker persistence settings to get wrong.
+- Several workers claim safely with `SELECT … FOR UPDATE SKIP LOCKED`, so no two workers take the same run.
+
+**Cost we accept:**
+
+- A run can wait up to about one second before a worker picks it up.
+- The polling puts a small constant load on the database.
+- It does not scale to thousands of jobs per second. Above that, a broker would be the right choice, and the table would stay the source of truth for run state.
+- There are no built-in retries, priorities or delayed jobs. We would write them ourselves if we needed them.
 
 **Rejected:**
 
+- **Redis or RabbitMQ (with Celery or a similar worker library):** one more service to run and configure, and a second place for run state, for a load a Postgres table handles easily.
 - **One app container:** a browser failure, or a restart of the UI, would affect both the UI and active runs.
 - **A separate Selenium browser container:** `webdriver.Remote` lacks `execute_cdp_cmd`, and the service would be tied to Selenium.
 
