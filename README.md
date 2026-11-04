@@ -125,6 +125,16 @@ BOTS: list[type[Bot]] = [ExampleBot, ArcaptchaBot, HelloBot]
 
 The worker checks the list at startup (unique `id`, non-empty `name` and `modes`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
 
+## Data persistence
+
+The run history lives in Postgres, on the named volume `postgres-data` (see `compose.yaml`). It survives `docker compose down`, a restart and a rebuild. Only `docker compose down -v` deletes it.
+
+To check it:
+
+1. Launch the `example` bot on `/bots`, and see the run on `/runs`.
+2. Run `docker compose restart` (or `docker compose down` and then `docker compose up -d`).
+3. Open `/runs` again. The run is still there.
+
 ## Stop and reset
 
 ```
