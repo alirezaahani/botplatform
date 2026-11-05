@@ -168,8 +168,8 @@ Real output of the test command:
 
 ```
 45 passed in 38.54s      (Chrome tests, 4 workers)
-179 passed, 45 deselected in 19.78s   (everything else)
-(the live test is deselected in both)
+181 passed, 46 deselected in 8.90s    (everything else)
+(the live test is never run by this command)
 ```
 
 ### What the tests cover
