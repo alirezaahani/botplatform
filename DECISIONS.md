@@ -427,6 +427,8 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 #### Bonus (b): two profiles, a batch runner and a report page
 
+*Later replaced: the report is now `/stats` and the batch flags changed, see "Stats page replaces the bonus report" below.*
+
 **What:**
 
 - **`no-cdc`** runs an `init_script` that deletes chromedriver's `cdc_` properties from `window` before page scripts run. **`webgl-fix`** adds `--enable-unsafe-swiftshader`, so headful Chrome gets a WebGL context. Each is one change from the baseline; a combined profile comes after measuring.
@@ -475,6 +477,14 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 **Rejected alternative:** rebuilding each background by taking the per-pixel mode over about 100 samples per background type and subtracting it. It is simpler, but fragile (it breaks with any new background) and needs reference data shipped with the code.
 
 **Live result:** the `cv` bots solved 16 of 16 live runs on attempt 1 (6 in a smoke batch, 10 in the comparison below). The fake demo accepts an answer equal to a known target, so the tests show our own logic; the live runs are what show the site accepts these paths. See the next section and `evidence/solver/results-headful-2x2.md`.
+
+### Stats page replaces the bonus report
+
+**What:** `/bonus`, `/bonus.md`, their `?since=` and `?bot=` filters and the `create` captcha type columns are gone. `/stats` shows, for each bot and mode, the finished runs by status, the success rate with a 95% Wilson interval, and the runs a person watched. Runs with a `viewer_connected` event are left out of the rate and counted only as watched. The batch runner now takes `--bots` (bot ids) instead of `--profiles`, so it can run the solver bots, and loses `--jitter`, `--stop-after` and `--run-timeout`. All eleven bots are kept.
+
+**Why:** the bonus report measured whether the first `create` answer was a block. Now that the solver bots finish the login, the measure that matters is verified success, and the report was built around the question that has been answered. The batch had grown rules (jitter, early stop) that the later batches switched off, and it could not run the solver bots at all. Keeping every bot costs nothing at run time and keeps the history of what each one did reproducible.
+
+**Cost:** the page no longer tells why a run was blocked, only that it was; the reason is on each run's page. Old links to `/bonus` return 404. The evidence files record results made with the old report and flags.
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
