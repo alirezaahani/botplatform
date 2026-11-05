@@ -1,6 +1,6 @@
 """Runs many bot runs one after another and prints one line for each, to compare bots.
 
-    docker compose run --rm web python -m botplatform.batch --bots arcaptcha,arcaptcha-solver --runs 10
+    docker compose run --rm web python -m botplatform.batch --bots arcaptcha,arcaptcha-solver-cv-linear --runs 10
 
 It queues runs through the normal queue and waits for the worker to finish each, so a batch run
 is a normal run in the history. The order is shuffled so that time of day or an IP reputation
@@ -23,7 +23,9 @@ from botplatform.db import BotRecord, Run, session_factory
 from botplatform.worker import queue
 
 MODES = ("headless", "headful")
-RUN_TIMEOUT = 240  # seconds to wait for one run; the worker's own limit is shorter
+# Seconds to wait for one run. The default RUN_TIME_LIMIT_SECONDS is 180; if it is raised above
+# this, a run is reported as wait_timeout while it carries on in the worker.
+RUN_TIMEOUT = 240
 Combo = tuple[str, str]  # bot id, mode
 
 
@@ -128,9 +130,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args.modes = [m for m in args.modes.split(",") if m]
     if not args.bots:
         parser.error("--bots needs at least one bot id")
-    unknown = [m for m in args.modes if m not in MODES]
-    if unknown:
-        parser.error(f"unknown modes {unknown}; known: {', '.join(MODES)}")
+    if not args.modes:
+        parser.error("--modes needs at least one mode")
     if args.runs < 1:
         parser.error("--runs must be at least 1")
     return args

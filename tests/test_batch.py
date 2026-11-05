@@ -123,7 +123,7 @@ def test_arguments_need_bots_and_default_to_both_modes():
     with pytest.raises(SystemExit):
         batch.parse_args([])
     with pytest.raises(SystemExit):
-        batch.parse_args(["--bots", "a", "--modes", "nope"])
+        batch.parse_args(["--bots", "a", "--modes", ""])
 
 
 def test_main_refuses_an_unknown_bot_or_unsupported_mode(clean_db: sessionmaker, capsys):
@@ -133,6 +133,35 @@ def test_main_refuses_an_unknown_bot_or_unsupported_mode(clean_db: sessionmaker,
     assert "missing" in capsys.readouterr().out
     assert batch.main(["--bots", "solo", "--modes", "headful"]) == 2
     assert "does not support mode 'headful'" in capsys.readouterr().out
+
+
+def test_a_bot_with_its_own_modes_can_be_batched_and_unsupported_modes_exit_2(
+    clean_db: sessionmaker, capsys
+):
+    with clean_db.begin() as session:
+        session.add(BotRecord(id="plain", name="x", modes=["direct"]))
+    assert batch.main(["--bots", "plain", "--modes", "headless"]) == 2
+    assert "does not support mode 'headless'" in capsys.readouterr().out
+    stop = threading.Event()
+
+    def worker() -> None:
+        while not stop.is_set():
+            with clean_db.begin() as session:
+                run = queue.claim_next(session, "w1")
+                if run is not None:
+                    queue.finish(session, run.id, Status.SUCCESS, None)
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    try:
+        code = batch.main(["--bots", "plain", "--modes", "direct", "--runs", "1", "--pause", "0"])
+    finally:
+        stop.set()
+        thread.join()
+    assert code == 0
+    with clean_db() as session:
+        assert [(r.bot_id, r.mode) for r in session.scalars(select(Run))] == [("plain", "direct")]
 
 
 def test_batch_against_the_real_queue_with_a_stand_in_worker(db: sessionmaker):
