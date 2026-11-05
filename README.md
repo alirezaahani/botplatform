@@ -116,7 +116,7 @@ The worker must be running. The batch queues runs one at a time through the norm
 | Option | Default | Meaning |
 |---|---|---|
 | `--bots` | required | Comma separated bot ids, as listed on `/bots`. |
-| `--modes` | `headless,headful` | Comma separated modes. Every bot must support every mode given (exit code 2 otherwise). |
+| `--modes` | `headless,headful` | Comma separated modes. Every bot must support every mode given (exit code 2 otherwise). A bot with its own modes needs them named, for example `--bots example --modes direct`. |
 | `--runs` | 10 | Runs per bot and mode. |
 | `--pause` | 10 | Seconds between runs. |
 | `--seed` | random | Shuffle seed, to repeat an order. It is printed at the start. |
