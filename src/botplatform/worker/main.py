@@ -89,7 +89,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     stop_on_sigterm()
 
-    settings = Settings()
+    settings = Settings.model_validate({})
     worker_id = socket.gethostname()
 
     registry.validate(BOTS)

@@ -92,7 +92,7 @@ def find_gap_x_silhouette(background_png: bytes, piece_png: bytes, piece_top: in
     ring = cv2.dilate(inside, kernel) - inside
     strip = image[piece_top : piece_top + height].astype(np.float32)
 
-    def mean_under(mask):
+    def mean_under(mask: np.ndarray) -> np.ndarray:
         mask = mask.astype(np.float32)
         return cv2.matchTemplate(strip, mask, cv2.TM_CCORR)[0] / mask.sum()
 

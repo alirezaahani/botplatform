@@ -86,7 +86,7 @@ def find_enclosed_regions(img: np.ndarray) -> list[tuple[np.ndarray, int]]:
     # Drop single-pixel noise that the fence happened to ring in.
     enclosed = cv2.morphologyEx(enclosed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(enclosed, 8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(enclosed, connectivity=8)
     regions = [(labels == i, int(stats[i, cv2.CC_STAT_AREA])) for i in range(1, count)]
     regions.sort(key=lambda r: r[1], reverse=True)
     return regions
@@ -106,7 +106,7 @@ def _strip_thin_appendages(mask: np.ndarray) -> np.ndarray:
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (APPENDAGE_KERNEL,) * 2)
     opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(opened, 8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(opened, connectivity=8)
     if count <= 1:
         return mask
     best = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))

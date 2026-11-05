@@ -98,5 +98,5 @@ class RunArtifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-engine = create_engine(Settings().database_url, pool_pre_ping=True)
+engine = create_engine(Settings.model_validate({}).database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(engine, expire_on_commit=False)

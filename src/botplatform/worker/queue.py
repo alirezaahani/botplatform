@@ -43,12 +43,13 @@ def claim_next(session: Session, worker_id: str, lease_seconds: int = 30) -> Run
 
 def renew(session: Session, run_id: uuid.UUID, worker_id: str, lease_seconds: int) -> bool:
     """Extend the lease. False means this worker no longer owns a running run."""
-    result = session.execute(
+    renewed = session.scalar(
         update(Run)
         .where(Run.id == run_id, Run.status == Status.RUNNING, Run.worker_id == worker_id)
         .values(lease_expires_at=_lease_end(lease_seconds))
+        .returning(Run.id)
     )
-    return result.rowcount == 1
+    return renewed is not None
 
 
 def reap_expired(session: Session) -> list[uuid.UUID]:
@@ -78,9 +79,10 @@ def finish(
     error: str | None = None,
 ) -> bool:
     """Set the final status, unless the run has already finished. Returns whether it did."""
-    result = session.execute(
+    finished = session.scalar(
         update(Run)
         .where(Run.id == run_id, Run.status == Status.RUNNING)
         .values(status=status, reason=reason, error=error, ended_at=func.now())
+        .returning(Run.id)
     )
-    return result.rowcount == 1
+    return finished is not None
