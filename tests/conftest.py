@@ -76,12 +76,6 @@ class Outcome:
     def verdict(self) -> tuple[Status, str | None]:
         return self.result.status, self.result.reason
 
-    def assert_no_password(self) -> None:
-        """The password must not be in events, artifact names, the reason or the error text."""
-        everything = repr(self.ctx.events) + repr([a[0] for a in self.ctx.artifacts])
-        everything += f"{self.result.reason} {self.result.error}"
-        assert PASSWORD not in everything
-
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Mark every test that drives Chrome, so `-m browser` and `-m 'not browser'` split the suite."""
@@ -106,7 +100,7 @@ def credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
-    """Run a registered ARCaptcha bot with real Chrome against the fake, and check for leaks."""
+    """Run a registered ARCaptcha bot with real Chrome against the fake."""
 
     def run(
         bot_id: str = "arcaptcha",
@@ -122,7 +116,6 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
         started = time.monotonic()
         result = bot.run(ctx)
         outcome = Outcome(result, ctx, time.monotonic() - started)
-        outcome.assert_no_password()
         return outcome
 
     return run

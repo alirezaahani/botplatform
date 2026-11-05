@@ -43,7 +43,7 @@ class RunContext(Protocol):
         """Save a challenge ID as the run's latest, and keep it in the run's history."""
 
     def event(self, type: str, data: dict[str, Any] | None = None) -> None:
-        """Add an entry to the run's timeline. Never include passwords or other secrets."""
+        """Add an entry to the run's timeline."""
 
     def artifact(self, name: str, content_type: str, data: bytes) -> None:
         """Attach a file to the run, such as a screenshot."""

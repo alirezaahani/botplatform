@@ -11,6 +11,7 @@ from botplatform.bots.arcaptcha.images import sniff_image
 from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, PUZZLE_INFO_JS
 from botplatform.bots.arcaptcha.session import Session, do, wait_for
 from botplatform.bots.arcaptcha.timeouts import StepTimeout
+from botplatform.bots.selenium_support import describe
 from botplatform.solver.movement import HANDLE
 
 
@@ -69,15 +70,9 @@ def capture_puzzle(
             "puzzle_captured", {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info}
         )
     except Exception as error:  # noqa: BLE001 - a missing capture must not change the result
-        message = str(error).splitlines()[0][:200] if str(error) else ""
         ctx.event(
             "puzzle_capture_failed",
-            {
-                "challenge_id": challenge_id,
-                "n": n,
-                "type": type(error).__name__,
-                "message": message,
-            },
+            {"challenge_id": challenge_id, "n": n, "error": describe(error)},
         )
 
 

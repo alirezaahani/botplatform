@@ -7,10 +7,10 @@ from typing import Any
 from selenium.webdriver.common.action_chains import ActionChains
 
 from botplatform.bots.arcaptcha import puzzle
-from botplatform.bots.arcaptcha.errors import describe
 from botplatform.bots.arcaptcha.session import Session, do
 from botplatform.bots.arcaptcha.timeouts import POLL_SECONDS, StepTimeout
 from botplatform.bots.arcaptcha.traffic import classify, drain, types
+from botplatform.bots.selenium_support import describe
 from botplatform.contract import BotResult, Status
 from botplatform.solver import gap, movement
 

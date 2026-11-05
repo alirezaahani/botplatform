@@ -9,13 +9,16 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from botplatform.config import Settings
+from botplatform.contract import Bot, BotResult, Status
 from botplatform.db import Run
-from botplatform.worker import queue
+from botplatform.worker import child, queue
 from botplatform.worker.main import run_in_child
 
 # Spawns a grandchild in the same group (like Chrome), records its pid, then does `behavior`.
@@ -155,3 +158,17 @@ def test_sigterm_kills_the_child_and_marks_the_run_worker_stopped(
     assert worker.wait(timeout=10) == 0
     assert state(db, run_id) == ("error", "worker_stopped")
     assert is_dead(pid)
+
+
+def test_an_exception_raised_by_a_bot_becomes_an_unhandled_exception_result(
+    db: sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Exploding(Bot):
+        def run(self, ctx: Any) -> BotResult:
+            raise RuntimeError("it broke")
+
+    monkeypatch.setattr(child, "BOTS", [Exploding("arcaptcha", "x", modes=("headless",))])
+    result = child.execute(db, claimed_run(db))
+
+    assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
+    assert "RuntimeError: it broke" in result.error

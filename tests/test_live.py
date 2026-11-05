@@ -18,10 +18,10 @@ def test_real_demo_site(monkeypatch):
     ctx = RecordingContext()
     result = ArcaptchaBot(BASELINE_SPEC).run(ctx)
 
-    login = ctx.of("login_response")
+    login = ctx.of("login_request")
     print(f"\nstatus={result.status} reason={result.reason}")
     print(f"challenge ids={ctx.challenge_ids}")
-    print(f"login_response={login}")
+    print(f"login_request={login}")
     print(f"events={[kind for kind, _ in ctx.events]}")
     if result.error:
         print(result.error)
@@ -34,5 +34,5 @@ def test_real_demo_site(monkeypatch):
     assert any(c["captcha_type"] for c in ctx.of("create_response")), "no create response decoded"
     assert ctx.challenge_ids
     assert re.fullmatch(r"\d{30}", ctx.challenge_ids[-1])
-    assert login, "no login response"
+    assert login, "no login request"
     assert ctx.of("toast"), "no toast event"

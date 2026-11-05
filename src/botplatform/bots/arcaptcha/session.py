@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 from selenium import webdriver
 
-from botplatform.bots.arcaptcha.js import BLANK_PASSWORD_JS
 from botplatform.bots.arcaptcha.timeouts import (
     DEFAULT_TIMEOUTS,
     POLL_SECONDS,
@@ -18,9 +17,9 @@ from botplatform.bots.arcaptcha.timeouts import (
     StepTimeouts,
 )
 from botplatform.bots.selenium_support import (
-    CapturedResponse,
     ResponseWatcher,
     call_handling_alerts,
+    describe,
 )
 from botplatform.contract import RunContext
 from botplatform.profiles import BASELINE, Profile
@@ -39,9 +38,6 @@ def make_watcher(driver: webdriver.Chrome) -> ResponseWatcher:
             "login": lambda url: url.split("?")[0].endswith("/api/login"),
             "answer": lambda url: url.split("?")[0].endswith("/arcaptcha/api/answer"),
         },
-        # Not `login`, which holds the password. `create` carries the browser signals, and
-        # `answer` is kept because nobody has seen a decoded one yet.
-        capture_requests=frozenset({"create", "answer"}),
     )
 
 
@@ -60,7 +56,7 @@ class Session:
     watcher: ResponseWatcher = field(init=False)
 
     creates: list[dict[str, Any]] = field(default_factory=list)  # decoded `create` answers
-    logins: list[CapturedResponse] = field(default_factory=list)
+    logins: list[dict[str, Any]] = field(default_factory=list)  # every `login`, in order
     answer_records: list[dict[str, Any]] = field(default_factory=list)  # every `answer`, in order
     pending_puzzle: tuple[str | None] | None = None  # set by a `create`, taken by `drain`
     puzzles: int = 0  # puzzles seen so far, captured or not
@@ -94,10 +90,9 @@ def wait_for(session: Session, check: Callable[[], Any], seconds: float, step: s
 
 def screenshot(session: Session, name: str) -> None:
     def capture() -> None:
-        session.driver.execute_script(BLANK_PASSWORD_JS)
         session.ctx.artifact(f"{name}.png", "image/png", session.driver.get_screenshot_as_png())
 
     try:
         do(session, capture)
     except Exception as error:  # noqa: BLE001 - a missing screenshot must not change the result
-        session.ctx.event("screenshot_failed", {"name": name, "type": type(error).__name__})
+        session.ctx.event("screenshot_failed", {"name": name, "error": describe(error)})

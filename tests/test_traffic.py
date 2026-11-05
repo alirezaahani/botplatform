@@ -2,7 +2,7 @@
 
 import pytest
 
-from botplatform.bots.arcaptcha.traffic import body_text, exchange_record
+from botplatform.bots.arcaptcha.traffic import exchange_record
 from botplatform.bots.selenium_support import CapturedResponse
 
 
@@ -38,16 +38,8 @@ def test_a_body_that_cannot_be_read_is_noted_and_does_not_raise(captured, side, 
     assert record["http_status"] == 201
 
 
-@pytest.mark.parametrize(
-    ("captured", "expected"),
-    [
-        pytest.param(response(b'{"msg": "ok"}'), {"msg": "ok"}, id="json-is-parsed"),
-        pytest.param(response(b"<html>oops</html>"), "<html>oops</html>", id="text-is-kept"),
-        pytest.param(response(b"x" * 900), "x" * 500, id="long-text-is-cut"),
-        pytest.param(response(None, "gone"), {"unreadable": "gone"}, id="no-body-says-why"),
-    ],
-)
-def test_the_login_response_is_recorded_as_json_when_it_is_json_and_as_text_otherwise(
-    captured, expected
-):
-    assert body_text(captured) == expected
+def test_an_undecodable_body_keeps_the_start_of_its_text():
+    record = exchange_record(response(b"<html>oops</html>" + b"x" * 900))
+
+    assert record["response"] is None
+    assert record["response_text"] == ("<html>oops</html>" + "x" * 900)[:500]

@@ -6,11 +6,11 @@ from typing import Any
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha.errors import describe
 from botplatform.bots.arcaptcha.js import BROWSER_SIGNALS_JS, WIDGET_CHALLENGE_ID_JS
 from botplatform.bots.arcaptcha.session import Session, do, screenshot, wait_for
 from botplatform.bots.arcaptcha.timeouts import POLL_SECONDS, StepTimeout
-from botplatform.bots.arcaptcha.traffic import body_text, classify, drain, json_body
+from botplatform.bots.arcaptcha.traffic import classify, drain
+from botplatform.bots.selenium_support import describe
 from botplatform.contract import BotResult, Status
 
 CHECKBOX = "#input-checkbox"
@@ -96,8 +96,6 @@ def log_in(session: Session) -> BotResult | None:
             Status.ERROR, "login_request_failed", "The login request failed before a response"
         )
     login = session.logins[-1]
-    body = json_body(login)
-    ctx.event("login_response", {"http_status": login.status, "body": body_text(login)})
 
     # The response has arrived, so a missing toast is a disagreement, not a timeout.
     try:
@@ -105,7 +103,7 @@ def log_in(session: Session) -> BotResult | None:
     except StepTimeout:
         toast = {"kind": "none", "text": ""}
     ctx.event("toast", toast)
-    return verify_login(login.status, body, toast)
+    return verify_login(login["http_status"], login["response"], toast)
 
 
 def verify_login(http_status: int, body: Any, toast: dict[str, str]) -> BotResult | None:
