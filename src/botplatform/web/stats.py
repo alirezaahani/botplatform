@@ -16,7 +16,6 @@ from botplatform.web.deps import DbSession
 
 router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-COLUMNS = (Status.SUCCESS, Status.BLOCKED, Status.FAILED, Status.TIMEOUT, Status.ERROR)
 
 
 @dataclass
@@ -76,5 +75,15 @@ def stats_page(request: Request, session: DbSession) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "stats.html",
-        {"rows": collect(session), "columns": COLUMNS, "rate_text": rate_text},
+        {
+            "rows": collect(session),
+            "columns": (
+                Status.SUCCESS,
+                Status.BLOCKED,
+                Status.FAILED,
+                Status.TIMEOUT,
+                Status.ERROR,
+            ),
+            "rate_text": rate_text,
+        },
     )

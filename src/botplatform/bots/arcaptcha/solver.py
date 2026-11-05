@@ -14,8 +14,6 @@ from botplatform.bots.selenium_support import describe
 from botplatform.contract import BotResult, Status
 from botplatform.solver import gap, movement
 
-OUTCOMES = {"next_puzzle": "rejected", "no_new_puzzle": "accepted", "no_answer": "no_answer"}
-
 
 @dataclass(kw_only=True)
 class Attempt:
@@ -117,8 +115,7 @@ class SliderSolver:
         attempt.target_x = attempt.dx = target
         answers_before = len(session.answer_records)
         self._drag_with_retries(session, attempt, target)
-        outcome = await_next_puzzle(session, current.n, answers_before)
-        attempt.outcome = OUTCOMES[outcome]
+        attempt.outcome = await_next_puzzle(session, current.n, answers_before)
         session.ctx.event("solve_attempt", attempt.as_event())
         return None, attempt.outcome == "accepted"
 
@@ -159,7 +156,11 @@ def release_everything(session: Session) -> None:
 
 
 def await_next_puzzle(session: Session, n: int, answers_before: int) -> str:
-    """Drain until the answer and then the next puzzle's capture arrive (or time runs out)."""
+    """Drain until the answer and then the next puzzle's capture arrive (or time runs out).
+
+    Returns "rejected" if a new puzzle came, "accepted" if none did within `answer_settle` (the
+    login is the judge), and "no_answer" if the answer request never appeared.
+    """
     settle = session.timeouts.answer_settle
     deadline = time.monotonic() + settle
     while len(session.answer_records) == answers_before:
@@ -170,7 +171,7 @@ def await_next_puzzle(session: Session, n: int, answers_before: int) -> str:
     deadline = time.monotonic() + settle
     while session.puzzles == n:
         if time.monotonic() >= deadline:
-            return "no_new_puzzle"
+            return "accepted"
         do(session, lambda: drain(session))
         time.sleep(POLL_SECONDS)
-    return "next_puzzle"
+    return "rejected"

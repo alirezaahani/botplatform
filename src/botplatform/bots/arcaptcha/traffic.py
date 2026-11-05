@@ -8,9 +8,6 @@ from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.selenium_support import CapturedResponse, describe
 from botplatform.contract import BotResult, Status
 
-CHALLENGE_TYPES = {"puzzle", "question", "2fa"}
-ACCEPTED_TYPES = {"accept", "cookie"}
-
 
 def drain(session: Session) -> bool:
     """Read new network responses. Each `create` is recorded the moment it is seen."""
@@ -100,9 +97,9 @@ def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotRe
     if not any(create["challenge_id"] for create in creates):
         return BotResult(Status.FAILED, "missing_challenge_id")
     latest = seen[-1] if seen else None
-    if latest in CHALLENGE_TYPES:
+    if latest in {"puzzle", "question", "2fa"}:
         return BotResult(Status.BLOCKED, "challenge_unsolved")
-    if latest not in ACCEPTED_TYPES:
+    if latest not in {"accept", "cookie"}:
         # Never guess: a type we have not seen cannot be treated as an accepted checkbox.
         return BotResult(Status.ERROR, "unknown_captcha_type", f"captcha_type={latest!r}")
     return None

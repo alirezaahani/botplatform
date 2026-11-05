@@ -20,9 +20,6 @@ from botplatform.worker import queue, registry
 log = logging.getLogger("botplatform.worker")
 
 
-CHILD_COMMAND = [sys.executable, "-m", "botplatform.worker.child"]
-
-
 def kill_group(child: subprocess.Popen) -> None:
     """Kill the child's whole process group, which includes its browser."""
     try:
@@ -43,7 +40,8 @@ def run_in_child(
 
     The group is killed at the time limit, if the lease is lost, or if this worker is stopped.
     """
-    child = subprocess.Popen([*(command or CHILD_COMMAND), str(run_id)], start_new_session=True)
+    command = command or [sys.executable, "-m", "botplatform.worker.child"]
+    child = subprocess.Popen([*command, str(run_id)], start_new_session=True)
     time_limit = settings.run_time_limit_seconds
     deadline = time.monotonic() + time_limit
     outcome: tuple[Status, str, str] | None = None

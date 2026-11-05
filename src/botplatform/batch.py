@@ -22,7 +22,6 @@ from botplatform.contract import ACTIVE_STATUSES
 from botplatform.db import BotRecord, Run, session_factory
 from botplatform.worker import queue
 
-MODES = ("headless", "headful")
 # Seconds to wait for one run. The default RUN_TIME_LIMIT_SECONDS is 180; if it is raised above
 # this, a run is reported as wait_timeout while it carries on in the worker.
 RUN_TIMEOUT = 240
@@ -121,7 +120,7 @@ def summary(batch: Batch) -> str:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m botplatform.batch", description=__doc__)
     parser.add_argument("--bots", required=True, help="comma separated bot ids")
-    parser.add_argument("--modes", default=",".join(MODES))
+    parser.add_argument("--modes", default="headless,headful")
     parser.add_argument("--runs", type=int, default=10, help="per bot and mode")
     parser.add_argument("--pause", type=float, default=10, help="seconds between runs")
     parser.add_argument("--seed", type=int, help="shuffle seed, for a reproducible order")

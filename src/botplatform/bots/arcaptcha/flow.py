@@ -8,8 +8,6 @@ from botplatform.bots.arcaptcha.traffic import types
 from botplatform.bots.selenium_support import describe
 from botplatform.contract import BotResult, Status
 
-UNSOLVED = BotResult(Status.BLOCKED, "challenge_unsolved")
-
 
 def run_flow(session: Session, challenge: Challenge | None = None) -> BotResult:
     try:
@@ -26,7 +24,11 @@ def _run(session: Session, challenge: Challenge) -> BotResult:
     ctx = session.ctx
     ctx.event("browser_profile", session.profile.settings())
     earlier = page.open_and_tick(session)
-    if earlier == UNSOLVED and types(session.creates)[-1:] == ["puzzle"]:
+    if (
+        earlier
+        and earlier.reason == "challenge_unsolved"
+        and types(session.creates)[-1:] == ["puzzle"]
+    ):
         earlier = challenge.resolve(session)
     screenshot(session, "after-click")
     # Decision 3b: the login is always attempted, but it can never upgrade an earlier failure.
