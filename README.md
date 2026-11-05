@@ -187,8 +187,8 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-45 passed in 53.55s      (Chrome tests, 4 workers)
-179 passed, 46 deselected in 13.14s    (everything else)
+45 passed in 43.66s      (Chrome tests, 4 workers)
+180 passed, 46 deselected in 11.15s    (everything else)
 (the live test is never run by this command)
 ```
 
@@ -212,7 +212,7 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions b
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
 | Browser profiles | `tests/test_profiles.py` (12 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; the run records the profile, the browser signals and the decoded `create` request. `tests/test_registry.py` (6 tests): the registry's ids, names and modes in order, every profile has a registered bot, `validate`'s rules | profile and registry rules |
-| Batch runner | `tests/test_batch.py` (9 tests): plan size and seeded shuffle, one line per run and a pause between runs only, Ctrl-C, a run that never finishes, the arguments, an unknown bot or unsupported mode refused, and a batch against the real queue with a stand-in worker | batch output and exit codes |
+| Batch runner | `tests/test_batch.py` (10 tests): plan size and seeded shuffle, one line per run and a pause between runs only, Ctrl-C, a run that never finishes, the arguments, an unknown bot or unsupported mode refused, a bot with only the `direct` mode batched, and a batch against the real queue with a stand-in worker | batch output and exit codes |
 | Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
 | Stats page | `tests/test_stats_page.py` (8 tests): counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns including a run with none | counts, rate and columns |
 | Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Stats page list the newest bot first | page and stats order |
