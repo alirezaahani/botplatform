@@ -50,12 +50,12 @@ def list_bots(request: Request, session: DbSession) -> HTMLResponse:
 
 @app.post("/bots/{bot_id}/runs")
 def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) -> RedirectResponse:
-    bot = session.get(BotRecord, bot_id)
-    if bot is None or not bot.active:
-        raise HTTPException(404, f"No active bot '{bot_id}'")
-    if mode not in bot.modes:
-        raise HTTPException(400, f"'{bot_id}' does not support mode '{mode}'")
-    run = queue.enqueue(session, bot_id, mode)
+    try:
+        run = queue.enqueue(session, bot_id, mode)
+    except queue.NoSuchBot as refused:
+        raise HTTPException(404, str(refused)) from None
+    except queue.LaunchRefused as refused:
+        raise HTTPException(400, str(refused)) from None
     session.commit()  # before the redirect, so the browser never follows it to a missing run
     return RedirectResponse(f"/runs/{run.id}", status_code=303)
 
@@ -111,7 +111,7 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
             "events": events,
             "artifacts": artifacts,
             "active": active,
-            "can_watch": active and run.mode == "headful" and bool(run.worker_id),
+            "can_watch": live.why_not_watchable(run) is None,
             "viewer_seen": any(event.type == "viewer_connected" for event in events),
             "still_queued": still_queued,
         },

@@ -9,15 +9,33 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from botplatform.contract import Status
-from botplatform.db import Run, RunEvent
+from botplatform.db import BotRecord, Run, RunEvent
 
 
 def _lease_end(lease_seconds: int):
     return func.now() + func.make_interval(0, 0, 0, 0, 0, 0, lease_seconds)
 
 
+class LaunchRefused(ValueError):
+    """The run cannot be queued: its bot does not have the mode."""
+
+
+class NoSuchBot(LaunchRefused):
+    """The run cannot be queued: no worker publishes an active bot with this id."""
+
+
+def check_launch(session: Session, bot_id: str, mode: str) -> None:
+    """Raise `NoSuchBot` or `LaunchRefused` unless a run of `bot_id` in `mode` can be queued."""
+    bot = session.get(BotRecord, bot_id)
+    if bot is None or not bot.active:
+        raise NoSuchBot(f"No active bot '{bot_id}'. Is the worker running?")
+    if mode not in bot.modes:
+        raise LaunchRefused(f"'{bot_id}' does not support mode '{mode}'")
+
+
 def enqueue(session: Session, bot_id: str, mode: str) -> Run:
-    """Add a queued run. The web launch endpoint and the batch runner both use this."""
+    """Add a queued run, after `check_launch`. The web launch and the batch runner use this."""
+    check_launch(session, bot_id, mode)
     run = Run(bot_id=bot_id, mode=mode)
     session.add(run)
     session.flush()  # fills in the id

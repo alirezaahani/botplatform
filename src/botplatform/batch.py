@@ -10,10 +10,8 @@ import random
 import sys
 import time
 
-from sqlalchemy import select
-
 from botplatform.contract import ACTIVE_STATUSES
-from botplatform.db import BotRecord, Run, SessionLocal
+from botplatform.db import Run, SessionLocal
 from botplatform.worker import queue
 
 parser = argparse.ArgumentParser(prog="python -m botplatform.batch")
@@ -26,16 +24,14 @@ parser.add_argument("--pause", type=float, default=10, help="seconds between run
 def main() -> int:
     args = parser.parse_args()
     bots, modes = args.bots.split(","), args.modes.split(",")
-    with SessionLocal() as session:
-        known = {b.id: b for b in session.scalars(select(BotRecord).where(BotRecord.active))}
-    for bot in bots:
-        if bot not in known:
-            print(f"Bot '{bot}' is not published by a worker. Is the worker running?")
-            return 2
-        for mode in modes:
-            if mode not in known[bot].modes:
-                print(f"Bot '{bot}' does not support mode '{mode}'")
-                return 2
+    try:  # every bot and mode, before any run is queued
+        with SessionLocal() as session:
+            for bot in bots:
+                for mode in modes:
+                    queue.check_launch(session, bot, mode)
+    except queue.LaunchRefused as refused:
+        print(refused)
+        return 2
 
     items = [(bot, mode) for bot in bots for mode in modes for _ in range(args.runs)]
     random.shuffle(items)

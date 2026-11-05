@@ -23,18 +23,26 @@ def worker_base_url(worker_id: str) -> str:
     return f"http://{worker_id}:{VIEWER_PORT}"
 
 
+def why_not_watchable(run: Run) -> str | None:
+    """Why `run` cannot be watched live, or None if it can. The run page shows its link by this."""
+    if run.mode != "headful":
+        return "Only headful runs can be watched live"
+    if run.status not in ACTIVE_STATUSES:
+        return "This run is not active, so there is nothing to watch"
+    if not run.worker_id:
+        return "No worker has picked up this run yet"
+    return None
+
+
 def viewer_url(run_id: uuid.UUID) -> str:
     """The worker's viewer address for a run, or an HTTP error saying why there is none."""
     with SessionLocal() as session:
         run = session.get(Run, run_id)
     if run is None:
         raise HTTPException(404, "No such run")
-    if run.mode != "headful":
-        raise HTTPException(409, "Only headful runs can be watched live")
-    if run.status not in ACTIVE_STATUSES:
-        raise HTTPException(409, "This run is not active, so there is nothing to watch")
-    if not run.worker_id:
-        raise HTTPException(409, "No worker has picked up this run yet")
+    reason = why_not_watchable(run)
+    if reason or not run.worker_id:  # `why_not_watchable` checks the worker too; this tells pyright
+        raise HTTPException(409, reason)
     return worker_base_url(run.worker_id)
 
 
