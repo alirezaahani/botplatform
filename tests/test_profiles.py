@@ -3,7 +3,7 @@
 import pytest
 
 from botplatform.bots import BOTS, arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
+from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts, core
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
 from botplatform.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
@@ -115,14 +115,14 @@ def test_missing_request_body_is_noted():
 
 
 def test_run_survives_a_failed_request_decode(fake, credentials, monkeypatch):
-    real = arcaptcha.decode_body
+    real = core.decode_body
 
     def decode(data: bytes):
         if b"site_key" in data and b"challenge_id" not in data:
             raise ValueError("cannot decode the request")
         return real(data)
 
-    monkeypatch.setattr(arcaptcha, "decode_body", decode)
+    monkeypatch.setattr(core, "decode_body", decode)
     ctx = RecordingContext()
     result = ArcaptchaBot(url=fake.url, timeouts=StepTimeouts(3, 2, 3, 1, 3, 1.5)).run(ctx)
 
