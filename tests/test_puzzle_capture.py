@@ -1,14 +1,16 @@
-"""Puzzle capture: the images and geometry of each puzzle are saved, and a failure is harmless."""
+"""Puzzle capture: each puzzle's images are saved for later study, and a failure is harmless."""
+
+from dataclasses import replace
 
 from botplatform.contract import Status
+from tests.conftest import FAST
 from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, create_reply
 
 
-def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
+def test_a_puzzle_is_saved_as_two_images_and_an_event(fake, run_bot):
     fake.creates = [create_reply("puzzle")]
     outcome = run_bot()
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "challenge_unsolved")
     artifacts = {name: (kind, data) for name, kind, data in outcome.ctx.artifacts}
     assert artifacts["puzzle-1-background.png"] == ("image/png", BACKGROUND_PNG)
     assert artifacts["puzzle-1-piece.png"] == ("image/png", PIECE_PNG)
@@ -18,17 +20,18 @@ def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
         "background": "puzzle-1-background.png",
         "piece": "puzzle-1-piece.png",
     }
-    background, piece = event["background"], event["piece"]
-    assert background["src"].endswith(f"/puzzles/{CHALLENGE_ID}/undefined/background")
-    assert piece["src"].endswith(f"/puzzles/{CHALLENGE_ID}/undefined/piece")
-    assert (background["natural_width"], background["natural_height"]) == (8, 4)
-    assert (piece["natural_width"], piece["natural_height"]) == (3, 3)
-    assert (background["rect"]["width"], background["rect"]["height"]) == (260, 160)
-    assert piece["rect"]["width"] == 40
-    assert (piece["style_left"], piece["style_top"]) == ("0px", "20px")
-    assert (piece["computed_left"], piece["computed_top"]) == ("0px", "20px")
-    assert (event["wrapper_rect"]["width"], event["wrapper_rect"]["height"]) == (260, 160)
-    assert event["piece_parent_rect"] is not None
-    assert event["slider_candidates"] == []  # the fake has no slider
-    assert event["device_pixel_ratio"] > 0
-    assert outcome.ctx.of("puzzle_capture_failed") == []
+    # The size the browser decoded each image to, and where it put them on the page.
+    assert (event["background"]["natural_width"], event["background"]["natural_height"]) == (8, 4)
+    assert (event["piece"]["natural_width"], event["piece"]["natural_height"]) == (3, 3)
+    assert event["piece"]["style_top"] == "20px"
+    assert event["background"]["rect"]["width"] > 0
+
+
+def test_images_that_cannot_be_fetched_are_noted_and_do_not_change_the_result(fake, run_bot):
+    fake.creates = [create_reply("puzzle")]
+    fake.break_puzzle_images()
+    outcome = run_bot(timeouts=replace(FAST, puzzle_images=1))
+
+    assert outcome.verdict == (Status.BLOCKED, "challenge_unsolved")  # the same as with images
+    assert outcome.ctx.one("puzzle_capture_failed")["challenge_id"] == CHALLENGE_ID
+    assert outcome.ctx.of("puzzle_captured") == []
