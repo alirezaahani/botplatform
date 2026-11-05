@@ -194,8 +194,8 @@ CI (`.github/workflows/ci.yml`) runs these checks and the tests, then starts the
 Real output of the test command:
 
 ```
-63 passed in 46.51s      (Chrome tests, 4 workers)
-160 passed, 64 deselected in 16.53s    (everything else)
+64 passed in 45.94s      (Chrome tests, 4 workers)
+157 passed, 65 deselected in 16.41s    (everything else)
 (the live test is never run by this command)
 ```
 
@@ -219,8 +219,8 @@ The tests mirror the code. `tests/core/` covers the platform (queue, worker, vie
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/core/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/core/test_viewer.py` | proxy and link rules |
 | Browser profiles | `tests/bots/utils/test_profiles.py` (10 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; `tests/bots/arcaptcha/test_run.py` records the profile, the browser signals and the decoded `create` request | profile rules |
-| Registry | `tests/bots/test_registry.py` (3 tests): the registry's ids, names and modes in order, `validate` accepts it, every profile has a registered bot that runs with it; `tests/core/test_registry.py` (2 tests): `validate`'s duplicate-id rule, a bot removed from the published list is marked inactive and kept | registry rules |
-| Selenium helpers | `tests/bots/utils/test_browser.py` (13 tests): `do`, `wait_for` and `StepTimeout`, and `SeleniumBot` (picks the profile by mode, records `browser_profile`, turns a timeout into `timeout` with a screenshot, screenshots and re-raises any other error); `test_network.py` (12 tests): `ResponseWatcher` and its records; `test_page_scripts.py` (6 tests): browser signals and in-page fetches | helper behaviour |
+| Registry | `tests/bots/test_registry.py` (2 tests): a snapshot of the registry's ids, names and modes in order (a repeated id would collapse in the dict and break it), and every profile has a registered bot that runs with it; `tests/core/test_registry.py` (1 test): a bot removed from the published list is marked inactive and kept | registry rules |
+| Selenium helpers | `tests/bots/utils/test_browser.py` (12 tests): `do`, `wait_for` and `StepTimeout`, and `SeleniumBot` (picks the profile by mode, records `browser_profile`, turns a timeout into `timeout` with a screenshot, screenshots and re-raises any other error); `test_network.py` (12 tests): `ResponseWatcher` and its records; `test_page_scripts.py` (6 tests): browser signals and in-page fetches | helper behaviour |
 | Drag | `tests/bots/utils/test_drag.py` (17 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px, and a real drag on a local page | path shape |
 | Stats | `tests/core/test_stats.py` (14 tests): the 95% Wilson interval (0 of n, n of n), and the page: counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns | interval values, counts, rate and columns |
 | Migrations | `tests/core/test_migrations.py` (1 test): `alembic upgrade head` and `alembic check` in a database of its own, so the migration matches the models | no drift |
@@ -283,7 +283,7 @@ class TitleBot(SeleniumBot):
 
 `SeleniumBot` gives the bot a browser profile per mode (`profile` and `profile_by_mode`), the `browser_profile` event, a `timeout` result when a step raises `StepTimeout` (as `wait_for` does), and an `error` screenshot when anything else is raised. Its modes are the `BrowserMode` enum (`headless`, `headful`), and only headful runs can be watched live.
 
-The worker checks the list at startup (unique `id`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
+The bot `id` must be unique: a repeated id silently replaces the earlier bot in the dict, and the registry snapshot test (`tests/bots/test_registry.py`) is what catches it, so add the new bot to that snapshot too. The worker publishes the list at startup, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
 
 You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx, mode) -> BotResult`, and the core never imports Selenium. The optional Selenium helpers live in `src/botplatform/bots/utils/`: `browser.py` (the `chrome()` launcher, `SeleniumBot`, `wait_for`, the alert-aware `do`, `screenshot`), `profiles.py` (browser profiles), `network.py` (`ResponseWatcher`), `drag.py` (drag paths and `perform_drag`) and `page_scripts.py` (browser signals and in-page fetches). A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`. Nothing in this repo has a Playwright bot, and Playwright is not a dependency. Its browser would also have to be installed in the worker image.
 
