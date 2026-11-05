@@ -139,6 +139,7 @@ def display(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         if Path(f"/tmp/.X11-unix/X{number}").exists():
             break
         time.sleep(0.1)
+    assert xvfb.poll() is None, f"Xvfb did not start on :{number}"
     monkeypatch.setenv("DISPLAY", f":{number}")
     yield
     xvfb.terminate()
