@@ -61,7 +61,9 @@ def test_counts_per_bot_and_mode_with_rate_and_interval(client: TestClient):
         seed_run(status=status)
     seed_run(bot="other", mode="headful", status="success")
     rows = stats_rows(client)
-    low, high = wilson_interval(6, 11)
+    interval = wilson_interval(6, 11)
+    assert interval is not None
+    low, high = interval
     rate = f"55% ({low * 100:.0f}% to {high * 100:.0f}%)"
     # Runs, Success, Blocked, Failed, Timeout, Error, rate, Watched
     assert rows[("arcaptcha", "headless")] == ["11", "6", "2", "1", "1", "1", rate, "0"]

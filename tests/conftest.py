@@ -3,7 +3,7 @@
 import os
 import subprocess
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -162,6 +162,6 @@ class StubBot(Bot):
         raise NotImplementedError
 
 
-def stub_bot(bot_id: str, modes: tuple[str, ...] = ("direct",)) -> Bot:
+def stub_bot(bot_id: str, modes: Sequence[str] = ("direct",)) -> Bot:
     """A bot that exists only to be registered."""
     return StubBot(bot_id, bot_id, modes=modes)

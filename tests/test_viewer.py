@@ -45,17 +45,21 @@ def upstream() -> Iterator[str]:
 
 
 @pytest.fixture
+def worker_ids() -> list[str]:
+    """The worker ids the viewer asked the upstream address for, in order."""
+    return []
+
+
+@pytest.fixture
 def client(
-    upstream: str, monkeypatch: pytest.MonkeyPatch, clean_db: sessionmaker
+    upstream: str, worker_ids: list[str], monkeypatch: pytest.MonkeyPatch, clean_db: sessionmaker
 ) -> Iterator[TestClient]:
-    seen: list[str] = []
     monkeypatch.setattr(
-        live, "worker_base_url", lambda worker_id: seen.append(worker_id) or upstream
+        live, "worker_base_url", lambda worker_id: worker_ids.append(worker_id) or upstream
     )
     with clean_db.begin() as session:
         session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless", "headful"]))
     with TestClient(app) as test_client:
-        test_client.worker_ids = seen  # type: ignore[attr-defined]
         yield test_client
 
 
@@ -74,12 +78,12 @@ def event_types(run_id: uuid.UUID) -> list[str]:
         return list(session.scalars(select(RunEvent.type).where(RunEvent.run_id == run_id)))
 
 
-def test_static_files_come_from_the_runs_worker(client: TestClient) -> None:
+def test_static_files_come_from_the_runs_worker(client: TestClient, worker_ids: list[str]) -> None:
     run_id = make_run()
     response = client.get(f"/runs/{run_id}/live/vnc.html")
     assert response.status_code == 200
     assert "fake noVNC" in response.text
-    assert client.worker_ids == ["worker-1"]
+    assert worker_ids == ["worker-1"]
 
 
 def test_live_redirects_to_novnc_through_the_proxy(client: TestClient) -> None:
@@ -114,7 +118,7 @@ def test_websocket_closes_when_the_run_ends(
         socket.send_bytes(b"hello")
         assert socket.receive_bytes() == b"echo:hello"
         with SessionLocal.begin() as session:
-            session.get(Run, run_id).status = "success"  # type: ignore[union-attr]
+            session.get_one(Run, run_id).status = "success"
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_bytes()
         assert closed.value.code == 1000

@@ -78,7 +78,9 @@ def state(sessions: sessionmaker, run_id: uuid.UUID) -> tuple[str, str | None]:
 
 
 def settings(limit: int = 30, lease: int = 30, renew: float = 0.2) -> Settings:
-    return Settings(run_time_limit_seconds=limit, lease_seconds=lease, lease_renew_seconds=renew)
+    return Settings.model_validate(
+        {"run_time_limit_seconds": limit, "lease_seconds": lease, "lease_renew_seconds": renew}
+    )
 
 
 def test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit(
@@ -170,4 +172,5 @@ def test_an_exception_raised_by_a_bot_becomes_an_unhandled_exception_result(
     result = child.execute(claimed_run(db))
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
+    assert result.error is not None
     assert "RuntimeError: it broke" in result.error

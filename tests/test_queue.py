@@ -3,8 +3,9 @@
 import threading
 import time
 import uuid
+from datetime import timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import sessionmaker
 
 from botplatform.contract import Status
@@ -18,9 +19,13 @@ def add_runs(sessions: sessionmaker, count: int) -> list[uuid.UUID]:
     with sessions.begin() as session:
         for i in range(count):
             run = Run(bot_id="arcaptcha", mode="headless")
-            run.queued_at = text(f"now() + interval '{i} milliseconds'")  # type: ignore[assignment]
             session.add(run)
             session.flush()
+            session.execute(
+                update(Run)
+                .where(Run.id == run.id)
+                .values(queued_at=func.now() + timedelta(milliseconds=i))
+            )
             ids.append(run.id)
     return ids
 
@@ -54,7 +59,8 @@ def test_claim_marks_the_run_running_with_a_lease(db: sessionmaker) -> None:
     claim(db, "w1", 30)
     run = get(db, run_id)
     assert (run.status, run.worker_id) == ("running", "w1")
-    assert run.started_at is not None and run.lease_expires_at > run.started_at  # type: ignore[operator]
+    assert run.started_at is not None and run.lease_expires_at is not None
+    assert run.lease_expires_at > run.started_at
 
 
 def test_concurrent_claims_never_duplicate_or_lose_a_run(db: sessionmaker) -> None:
@@ -91,10 +97,12 @@ def test_renew_extends_the_lease(db: sessionmaker) -> None:
     (run_id,) = add_runs(db, 1)
     claim(db, "w1", 5)
     before = get(db, run_id).lease_expires_at
+    assert before is not None
     time.sleep(0.05)
     with db.begin() as session:
         assert queue.renew(session, run_id, "w1", 60)
-    assert get(db, run_id).lease_expires_at > before  # type: ignore[operator]
+    after = get(db, run_id).lease_expires_at
+    assert after is not None and after > before
 
 
 def test_renew_refuses_another_worker_or_a_run_that_is_not_running(db: sessionmaker) -> None:
