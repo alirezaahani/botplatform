@@ -22,7 +22,7 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 class Row:
     bot: str
     mode: str
-    counts: dict[str, int] = field(default_factory=dict)  # status -> runs nobody watched
+    counts: dict[Status, int] = field(default_factory=dict)  # status -> runs nobody watched
     watched: int = 0
 
     @property
@@ -39,7 +39,7 @@ def collect(session: Session) -> list[Row]:
     query = (
         select(Run.bot_id, Run.mode, Run.status, viewed, BotRecord.modes)
         .join(BotRecord, BotRecord.id == Run.bot_id)
-        .where(Run.status.not_in([s.value for s in ACTIVE_STATUSES]))
+        .where(Run.status.not_in(ACTIVE_STATUSES))
         # Newest bot first, like the Bots page; the modes follow the bot's declared order below.
         .order_by(BotRecord.position.desc(), Run.bot_id)
     )

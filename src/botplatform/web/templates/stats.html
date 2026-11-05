@@ -23,7 +23,7 @@
       <td>{{ row.bot }}</td>
       <td>{{ row.mode }}</td>
       <td>{{ row.runs }}</td>
-      {% for status in columns %}<td>{{ row.counts.get(status.value, 0) }}</td>{% endfor %}
+      {% for status in columns %}<td>{{ row.counts.get(status, 0) }}</td>{% endfor %}
       <td>{{ rate_text(row) }}</td>
       <td>{{ row.watched }}</td>
     </tr>

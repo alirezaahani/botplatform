@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from botplatform.contract import Status
 from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.stats import wilson_interval
 from botplatform.web.app import app
@@ -19,7 +20,7 @@ START = datetime(2026, 11, 4, 9, 0, 0, tzinfo=UTC)
 def seed_run(
     bot: str = "arcaptcha",
     mode: str = "headless",
-    status: str = "success",
+    status: Status = Status.SUCCESS,
     viewer: bool = False,
     started_at: datetime | None = None,
     ended_at: datetime | None = None,
@@ -57,9 +58,11 @@ def stats_rows(client: TestClient) -> dict[tuple[str, str], list[str]]:
 
 
 def test_counts_per_bot_and_mode_with_rate_and_interval(client: TestClient):
-    for status in ["success"] * 6 + ["blocked"] * 2 + ["failed", "timeout", "error"]:
+    for status in (
+        [Status.SUCCESS] * 6 + [Status.BLOCKED] * 2 + [Status.FAILED, Status.TIMEOUT, Status.ERROR]
+    ):
         seed_run(status=status)
-    seed_run(bot="other", mode="headful", status="success")
+    seed_run(bot="other", mode="headful", status=Status.SUCCESS)
     rows = stats_rows(client)
     interval = wilson_interval(6, 11)
     assert interval is not None
@@ -87,10 +90,10 @@ def test_a_perfect_count_is_not_shown_as_a_certain_hundred_percent(client: TestC
 
 
 def test_watched_runs_are_left_out_of_the_rate_and_counted_as_watched(client: TestClient):
-    seed_run(status="success")
-    seed_run(status="blocked")
-    seed_run(status="success", viewer=True)
-    seed_run(status="success", viewer=True)
+    seed_run(status=Status.SUCCESS)
+    seed_run(status=Status.BLOCKED)
+    seed_run(status=Status.SUCCESS, viewer=True)
+    seed_run(status=Status.SUCCESS, viewer=True)
     row = stats_rows(client)[("arcaptcha", "headless")]
     assert row[0:3] == ["2", "1", "1"]  # Runs, Success, Blocked
     assert row[6].startswith("50% (")
@@ -98,10 +101,10 @@ def test_watched_runs_are_left_out_of_the_rate_and_counted_as_watched(client: Te
 
 
 def test_queued_and_running_runs_are_not_counted_anywhere(client: TestClient):
-    seed_run(status="success")
-    seed_run(status="queued")
-    seed_run(status="running")
-    seed_run(bot="other", status="running", viewer=True)
+    seed_run(status=Status.SUCCESS)
+    seed_run(status=Status.QUEUED)
+    seed_run(status=Status.RUNNING)
+    seed_run(bot="other", status=Status.RUNNING, viewer=True)
     rows = stats_rows(client)
     assert rows[("arcaptcha", "headless")][0] == "1"
     assert ("other", "headless") not in rows
@@ -130,7 +133,7 @@ def test_empty_history_renders_and_the_page_explains_its_rules(client: TestClien
 
 def test_history_shows_start_end_and_duration_and_blanks_when_missing(client: TestClient):
     done = seed_run(started_at=START + timedelta(seconds=5), ended_at=START + timedelta(seconds=47))
-    never_started = seed_run(status="queued")
+    never_started = seed_run(status=Status.QUEUED)
     text = client.get("/runs").text
     finished_row = next(r for r in text.split("<tr>") if str(done)[:8] in r)
     assert "2026-11-04 09:00:05" in finished_row
