@@ -1,9 +1,10 @@
 """The interface between the platform and bots. Bots import only this module from the core."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, ClassVar, Protocol
+from typing import Any, Protocol
 
 
 class Status(StrEnum):
@@ -49,12 +50,15 @@ class RunContext(Protocol):
 
 
 class Bot(ABC):
-    """Subclass this and add the class to `BOTS` in `botplatform/bots/__init__.py`."""
+    """Subclass this, construct it, and add the instance to `BOTS` in `botplatform/bots/__init__.py`."""
 
-    id: ClassVar[str]
-    name: ClassVar[str]
-    description: ClassVar[str] = ""
-    modes: ClassVar[list[str]]
+    def __init__(
+        self, id: str, name: str, description: str = "", modes: Sequence[str] = ()
+    ) -> None:
+        self.id = id
+        self.name = name
+        self.description = description
+        self.modes = list(modes)
 
     @abstractmethod
     def run(self, ctx: RunContext) -> BotResult:

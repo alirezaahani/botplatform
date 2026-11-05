@@ -6,7 +6,15 @@ from dataclasses import replace
 import pytest
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha import ArcaptchaBot, Session, core, page, redact, run_flow
+from botplatform.bots.arcaptcha import (
+    BASELINE_SPEC,
+    ArcaptchaBot,
+    Session,
+    core,
+    page,
+    redact,
+    run_flow,
+)
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
@@ -303,7 +311,7 @@ def test_connection_refused_is_an_error(run_bot):
 def test_missing_credentials(monkeypatch):
     monkeypatch.delenv("ARCAPTCHA_USERNAME", raising=False)
     monkeypatch.delenv("ARCAPTCHA_PASSWORD", raising=False)
-    result = ArcaptchaBot().run(RecordingContext())
+    result = ArcaptchaBot(BASELINE_SPEC).run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "missing_credentials")
 
@@ -394,7 +402,7 @@ def test_run_keeps_the_site_host_in_the_error_but_hides_the_password(monkeypatch
         raise RuntimeError("could not load https://demo.arcaptcha.co/ for demo")
 
     monkeypatch.setattr(core, "run_flow", explode)
-    result = ArcaptchaBot(url="https://demo.arcaptcha.co/").run(RecordingContext())
+    result = ArcaptchaBot(BASELINE_SPEC, url="https://demo.arcaptcha.co/").run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
     assert "https://demo.arcaptcha.co/" in result.error

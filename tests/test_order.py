@@ -14,8 +14,13 @@ from botplatform.worker import registry
 from tests.test_bonus import seed_run
 
 
-def make_bot(bot_id: str) -> type[Bot]:
-    return type(bot_id, (Bot,), {"id": bot_id, "name": bot_id, "modes": ["direct"]})
+class StubBot(Bot):
+    def run(self, ctx):
+        raise NotImplementedError
+
+
+def make_bot(bot_id: str) -> Bot:
+    return StubBot(bot_id, bot_id, modes=["direct"])
 
 
 @pytest.fixture

@@ -3,7 +3,13 @@
 import pytest
 
 from botplatform.bots import BOTS, arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts, traffic
+from botplatform.bots.arcaptcha import (
+    BASELINE_BOT,
+    BASELINE_SPEC,
+    ArcaptchaBot,
+    StepTimeouts,
+    traffic,
+)
 from botplatform.bots.arcaptcha.traffic import exchange_record
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
@@ -66,13 +72,13 @@ def test_every_profile_has_a_registered_bot_with_a_unique_id():
 
 
 def test_baseline_bot_keeps_its_identity_and_profile_bots_describe_theirs():
-    assert (ArcaptchaBot.id, ArcaptchaBot.name) == ("arcaptcha", "ARCaptcha demo (Selenium)")
-    assert ArcaptchaBot.profile is BASELINE
+    assert (BASELINE_BOT.id, BASELINE_BOT.name) == ("arcaptcha", "ARCaptcha demo (Selenium)")
+    assert BASELINE_BOT.profile is BASELINE
     bot = next(b for b in BOTS if b.id == "arcaptcha-stealth-flags")
     assert "stealth-flags" in bot.name
     assert STEALTH_FLAGS.description in bot.description
-    assert bot.modes == ArcaptchaBot.modes
-    assert bot().profile is STEALTH_FLAGS  # the worker builds bots with no arguments
+    assert bot.modes == BASELINE_BOT.modes
+    assert bot.profile is STEALTH_FLAGS  # the registered instance is what the worker runs
 
 
 # -- Evidence events ----------------------------------------------------------------------------
@@ -82,7 +88,7 @@ def test_baseline_bot_keeps_its_identity_and_profile_bots_describe_theirs():
 def test_run_records_profile_signals_and_create_request(fake, credentials, profile):
     fast = StepTimeouts(3, 2, 3, 1, 3, 1.5)
     ctx = RecordingContext()
-    result = ArcaptchaBot(url=fake.url, timeouts=fast, profile=profile).run(ctx)
+    result = ArcaptchaBot(BASELINE_SPEC, url=fake.url, timeouts=fast, profile=profile).run(ctx)
 
     assert result.status == Status.SUCCESS
     assert ctx.one("browser_profile") == profile.settings()
@@ -125,7 +131,9 @@ def test_run_survives_a_failed_request_decode(fake, credentials, monkeypatch):
 
     monkeypatch.setattr(traffic, "decode_body", decode)
     ctx = RecordingContext()
-    result = ArcaptchaBot(url=fake.url, timeouts=StepTimeouts(3, 2, 3, 1, 3, 1.5)).run(ctx)
+    result = ArcaptchaBot(
+        BASELINE_SPEC, url=fake.url, timeouts=StepTimeouts(3, 2, 3, 1, 3, 1.5)
+    ).run(ctx)
 
     assert result.status == Status.SUCCESS
     request = ctx.one("create_request")

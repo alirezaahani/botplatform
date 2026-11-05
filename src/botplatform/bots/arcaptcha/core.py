@@ -10,52 +10,39 @@ capture records `puzzle_capture_failed` and never changes the run's result.
 
 import os
 import traceback
-from typing import ClassVar
 from urllib.parse import urlsplit
 
 from botplatform.bots.arcaptcha.flow import run_flow
 from botplatform.bots.arcaptcha.redaction import redact
 from botplatform.bots.arcaptcha.session import DEMO_URL, Session
+from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec, solver_spec
 from botplatform.bots.arcaptcha.timeouts import DEFAULT_TIMEOUTS, StepTimeouts
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Bot, BotResult, RunContext, Status
-from botplatform.profiles import (
-    ALL_SIGNALS,
-    ALL_SIGNALS_HEADLESS,
-    BASELINE,
-    PROFILES,
-    Profile,
-    bot_id,
-)
+from botplatform.profiles import BASELINE, PROFILES, Profile
 
 
 class ArcaptchaBot(Bot):
-    id = "arcaptcha"
-    name = "ARCaptcha demo (Selenium)"
-    description = (
-        "Ticks the checkbox on demo.arcaptcha.co, records challenge_id, logs in and checks that "
-        "the login really succeeded."
-    )
-    modes: ClassVar[list[str]] = ["headless", "headful"]
-    profile: ClassVar[Profile] = BASELINE
-    # A profile for a mode, where `profile` is not right for every mode. Not listed: `profile`.
-    profile_by_mode: ClassVar[dict[str, Profile]] = {}
-    solve_with: ClassVar[tuple[str, str] | None] = None  # (finder name, mover name)
+    """The ARCaptcha scenario. A `BotSpec` says which variant this instance is."""
 
     def __init__(
         self,
+        spec: BotSpec,
+        *,
         url: str = DEMO_URL,
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
         profile: Profile | None = None,
     ) -> None:
+        super().__init__(spec.id, spec.name, spec.description, spec.modes)
+        self.spec = spec
         self.url = url
         self.timeouts = timeouts
-        self.profile = profile or type(self).profile
+        self.profile = profile or spec.profile
         self._given_profile = profile  # a profile passed in wins over the one for the mode
 
     def profile_for(self, mode: str) -> Profile:
-        """The browser profile for `mode`: the one passed in, else the class's for that mode."""
-        return self._given_profile or type(self).profile_by_mode.get(mode, self.profile)
+        """The browser profile for `mode`: the one passed in, else the spec's for that mode."""
+        return self._given_profile or self.spec.profile_by_mode.get(mode, self.spec.profile)
 
     def run(self, ctx: RunContext) -> BotResult:
         username = os.environ.get("ARCAPTCHA_USERNAME")
@@ -70,7 +57,7 @@ class ArcaptchaBot(Bot):
             profile = self.profile_for(ctx.mode)
             with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
                 session = Session(ctx, driver, username, password, self.url, self.timeouts, profile)
-                return run_flow(session, self.solve_with)
+                return run_flow(session, self.spec.solve_with)
         except Exception:  # noqa: BLE001 - every failure becomes an error result
             # The password must never reach the run's error field, whatever the exception says.
             host = urlsplit(self.url).hostname or ""
@@ -78,59 +65,15 @@ class ArcaptchaBot(Bot):
             return BotResult(Status.ERROR, "unhandled_exception", details)
 
 
-def solver_bot(finder: str, mover: str) -> type[ArcaptchaBot]:
-    """An automatic solver bot, `arcaptcha-solver-<finder>-<mover>`.
+BASELINE_BOT = ArcaptchaBot(BASELINE_SPEC)
 
-    The finder and mover names are keys of `gap.FINDERS` and `movement.MOVERS`.
-    """
-    return type(
-        f"ArcaptchaSolver{finder.title()}{mover.title()}Bot",
-        (ArcaptchaBot,),
-        {
-            "id": f"arcaptcha-solver-{finder}-{mover}",
-            "name": f"ARCaptcha demo (automatic solver: {finder} finder, {mover} movement)",
-            "description": (
-                "An automatic solver. Ticks the checkbox and, when a puzzle appears, finds the gap "
-                f"with the '{finder}' finder and drags the handle there with '{mover}' movement "
-                "(Selenium ActionChains), up to 3 answers per run, then logs in. A verified login "
-                "ends as success with the reason solved. If no gap is found the run ends as "
-                "blocked / gap_not_found, and after 3 rejected answers as blocked / solve_failed. "
-                "Headful uses the all-signals profile and headless the all-signals-headless one."
-            ),
-            "modes": ["headless", "headful"],
-            "profile": ALL_SIGNALS,
-            "profile_by_mode": {"headful": ALL_SIGNALS, "headless": ALL_SIGNALS_HEADLESS},
-            "solve_with": (finder, mover),
-        },
-    )
-
-
-SOLVER_BOTS: list[type[ArcaptchaBot]] = [
-    solver_bot("cv", "linear"),
-    solver_bot("cv", "eased"),
-    solver_bot("silhouette", "linear"),
-    solver_bot("silhouette", "eased"),
+PROFILE_BOTS: list[ArcaptchaBot] = [
+    ArcaptchaBot(profile_spec(p)) for p in PROFILES.values() if p.name != BASELINE.name
 ]
 
-
-def profile_bot(profile: Profile) -> type[ArcaptchaBot]:
-    """A bot class that runs the ARCaptcha scenario with `profile`, as `arcaptcha-<name>`.
-
-    One bot per profile makes the run history the evidence: a bot's runs are one profile's runs.
-    """
-    return type(
-        "Arcaptcha" + profile.name.title().replace("-", "") + "Bot",
-        (ArcaptchaBot,),
-        {
-            "id": bot_id(profile.name),
-            "name": f"ARCaptcha demo (Selenium, {profile.name})",
-            "description": f"{ArcaptchaBot.description} Browser profile: {profile.description}",
-            "profile": profile,
-        },
-    )
-
-
-# The baseline is `ArcaptchaBot` itself, so its id, name and description stay as they were.
-PROFILE_BOTS: list[type[ArcaptchaBot]] = [
-    profile_bot(p) for p in PROFILES.values() if p.name != BASELINE.name
+SOLVER_BOTS: list[ArcaptchaBot] = [
+    ArcaptchaBot(solver_spec("cv", "linear")),
+    ArcaptchaBot(solver_spec("cv", "eased")),
+    ArcaptchaBot(solver_spec("silhouette", "linear")),
+    ArcaptchaBot(solver_spec("silhouette", "eased")),
 ]

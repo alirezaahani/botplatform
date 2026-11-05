@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import sessionmaker
 
-from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
+from botplatform.bots.arcaptcha import BASELINE_SPEC, ArcaptchaBot, StepTimeouts
 from botplatform.contract import BotResult
 from botplatform.db import Base, BotRecord, Run, session_factory
 from tests.fake_demo.server import FakeDemo
@@ -92,7 +92,7 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
     def run(url: str | None = None, timeouts: StepTimeouts = FAST) -> Outcome:
         ctx = RecordingContext()
         started = time.monotonic()
-        result = ArcaptchaBot(url=url or fake.url, timeouts=timeouts).run(ctx)
+        result = ArcaptchaBot(BASELINE_SPEC, url=url or fake.url, timeouts=timeouts).run(ctx)
         outcome = Outcome(result, ctx, time.monotonic() - started)
         assert_no_password(outcome)
         return outcome

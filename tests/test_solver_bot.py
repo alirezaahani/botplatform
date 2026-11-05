@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from botplatform.bots import BOTS
-from botplatform.bots.arcaptcha import SOLVER_BOTS
+from botplatform.bots.arcaptcha import SOLVER_BOTS, ArcaptchaBot
 from botplatform.contract import Status
 from botplatform.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
 from botplatform.solver import gap
@@ -37,7 +37,7 @@ def solve(fake, credentials):
 
     def run(bot_id="arcaptcha-solver-cv-linear", timeouts=SOLVE):
         ctx = RecordingContext()
-        result = BY_ID[bot_id](url=fake.url, timeouts=timeouts).run(ctx)
+        result = ArcaptchaBot(BY_ID[bot_id].spec, url=fake.url, timeouts=timeouts).run(ctx)
         assert_no_password(type("O", (), {"result": result, "ctx": ctx})())
         return result, ctx
 
@@ -156,14 +156,16 @@ def test_the_solver_bots_are_registered_for_both_modes_with_a_plain_description(
 
 @pytest.mark.parametrize("bot", SOLVER_BOTS, ids=BOT_IDS)
 def test_each_mode_gets_its_own_browser_profile(bot):
-    instance = bot()
-    assert instance.profile_for("headful") is ALL_SIGNALS
-    assert instance.profile_for("headless") is ALL_SIGNALS_HEADLESS
-    assert instance.profile_for("anything else") is ALL_SIGNALS  # falls back to `profile`
+    assert bot.profile_for("headful") is ALL_SIGNALS
+    assert bot.profile_for("headless") is ALL_SIGNALS_HEADLESS
+    assert bot.profile_for("anything else") is ALL_SIGNALS  # falls back to `profile`
 
 
 def test_a_profile_passed_in_wins_over_the_mode():
-    assert SOLVER_BOTS[0](profile=ALL_SIGNALS).profile_for("headless") is ALL_SIGNALS
+    assert (
+        ArcaptchaBot(SOLVER_BOTS[0].spec, profile=ALL_SIGNALS).profile_for("headless")
+        is ALL_SIGNALS
+    )
 
 
 def test_a_headless_run_uses_the_headless_profile_and_still_solves(solve):

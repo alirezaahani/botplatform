@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from botplatform.bots.arcaptcha import ArcaptchaBot
+from botplatform.bots.arcaptcha import BASELINE_BOT
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.example import ExampleBot
 from tests.fake_demo.encoder import encode, encode_bytes
@@ -36,5 +36,5 @@ def test_garbage_is_rejected():
 
 
 def test_declared_modes():
-    assert ArcaptchaBot.modes == ["headless", "headful"]
-    assert ExampleBot.modes == ["direct"]
+    assert BASELINE_BOT.modes == ["headless", "headful"]
+    assert ExampleBot().modes == ["direct"]
