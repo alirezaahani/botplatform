@@ -8,9 +8,10 @@ from typing import Any
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha.images import sniff_image
-from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, HANDLE, PUZZLE_INFO_JS
+from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, PUZZLE_INFO_JS
 from botplatform.bots.arcaptcha.session import Session, do, wait_for
 from botplatform.bots.arcaptcha.timeouts import StepTimeout
+from botplatform.solver.movement import HANDLE
 
 
 @dataclass

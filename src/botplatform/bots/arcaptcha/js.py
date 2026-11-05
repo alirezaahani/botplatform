@@ -1,9 +1,6 @@
 """JavaScript run in the page, and the CSS selectors of the slider."""
 
 # The slider handle and the puzzle piece. Both were seen in captured DOM data and confirmed live.
-HANDLE = "div.draggable"
-PIECE = "img.puzzle"
-
 
 # Reads the challenge ID three ways, separately, so each answer stays distinct. The widget list is
 # `window.arcaptcha.widgets`, keyed by widget ID (from widget.arcaptcha.ir/1/api.js).

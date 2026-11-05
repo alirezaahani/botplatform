@@ -13,8 +13,6 @@ from typing import Any
 
 from selenium.webdriver.common.action_chains import ActionChains
 
-from botplatform.bots.arcaptcha.js import HANDLE, PIECE
-
 Path = list[tuple[int, int, float]]
 
 LINEAR_STEPS = 8
@@ -60,6 +58,9 @@ MOVERS: dict[str, Callable[[int, random.Random], Path]] = {
 }
 
 # The handle's and piece's `left` right now, in px (None when missing).
+# The widget being dragged: the slider's handle and the puzzle piece it moves.
+HANDLE = "div.draggable"
+PIECE = "img.puzzle"
 LEFTS_JS = """
 const left = (selector) => {
   const el = document.querySelector(selector);
