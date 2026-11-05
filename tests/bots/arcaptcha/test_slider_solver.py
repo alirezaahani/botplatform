@@ -11,8 +11,8 @@ from botplatform.bots.arcaptcha import SOLVER_BOTS
 from botplatform.bots.arcaptcha import gap_finders as gap
 from botplatform.bots.utils.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
 from botplatform.contract import Status
-from tests.conftest import FAST
-from tests.fake_demo.server import Puzzle
+from tests.bots.arcaptcha.conftest import FAST
+from tests.bots.arcaptcha.fake_demo.server import Puzzle
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 ROW = json.loads((DIR / "manifest.json").read_text())[0]

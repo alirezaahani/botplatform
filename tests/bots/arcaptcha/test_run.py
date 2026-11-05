@@ -2,7 +2,7 @@
 
 Only what needs a real browser is tested here. The decisions made from what the browser saw
 (which `create` types block, which login responses are confirmed) are tested without Chrome in
-`test_verdicts.py`.
+`test_checkbox.py` and `test_login.py`.
 """
 
 import socket
@@ -12,9 +12,12 @@ import pytest
 from selenium.common.exceptions import WebDriverException
 
 from botplatform.bots.arcaptcha import BASELINE_BOT
+from botplatform.bots.utils.profiles import BASELINE, STEALTH_FLAGS
 from botplatform.contract import Status
-from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
-from tests.fake_demo.server import CHALLENGE_ID, Reply, Toast, create_reply
+from tests.bots.arcaptcha.conftest import FAST, PASSWORD, USERNAME
+from tests.bots.arcaptcha.fake_demo.server import CHALLENGE_ID, Reply, Toast, create_reply
+from tests.bots.utils.test_page_scripts import SIGNAL_KEYS
+from tests.conftest import RecordingContext
 
 LOGIN_OK = Reply(status=200, json={"msg": "You are logged in successfully!"})
 LOGIN_REFUSED = Reply(status=400, json={"msg": "Please solve captcha"})
@@ -229,3 +232,20 @@ def test_without_credentials_the_run_is_an_error_before_any_browser_starts(monke
     result = BASELINE_BOT.run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "missing_credentials")
+
+
+# -- The evidence a run records ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("profile", [BASELINE, STEALTH_FLAGS], ids=lambda p: p.name)
+def test_a_run_records_the_profile_the_signals_and_the_create_request(run_bot, fake, profile):
+    outcome = run_bot(profile=profile)
+
+    assert outcome.result.status == Status.SUCCESS
+    assert outcome.ctx.one("browser_profile") == profile.settings()
+    signals = outcome.ctx.one("browser_signals")
+    assert SIGNAL_KEYS <= signals.keys()
+    assert signals["webdriver"] is (profile is BASELINE)
+    request = outcome.ctx.one("create_request")
+    assert request["request"] == {"site_key": "fake"}  # what the page sent
+    assert request["response"]["captcha_type"] == "accept"

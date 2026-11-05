@@ -10,7 +10,6 @@ real site would accept the bot.
 
 import asyncio
 import json
-import socket
 import struct
 import threading
 import zlib
@@ -19,12 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
-from tests.fake_demo.encoder import encode
+from tests.bots.arcaptcha.fake_demo.encoder import encode
+from tests.local_server import LocalServer
 
 PAGE = (Path(__file__).parent / "page.html").read_text()
 CHALLENGE_ID = "123456789012345678901234567890"
@@ -72,30 +71,6 @@ BACKGROUND_PNG = tiny_png(8, 4, 200)
 PIECE_PNG = tiny_png(3, 3, 50)
 
 
-class _Server:
-    def __init__(self, app: FastAPI) -> None:
-        self.sock = socket.socket()
-        self.sock.bind(("127.0.0.1", 0))
-        self.origin = f"http://127.0.0.1:{self.sock.getsockname()[1]}"
-        config = uvicorn.Config(app, log_level="warning", timeout_graceful_shutdown=2)
-        self.server = uvicorn.Server(config)
-        self.thread = threading.Thread(
-            target=self.server.run, kwargs={"sockets": [self.sock]}, daemon=True
-        )
-
-    def start(self) -> None:
-        self.thread.start()
-        while not self.server.started:
-            if not self.thread.is_alive():
-                raise RuntimeError("the fake server did not start")
-            threading.Event().wait(0.02)
-
-    def stop(self) -> None:
-        self.server.should_exit = True
-        self.thread.join(10)
-        self.sock.close()
-
-
 @dataclass(frozen=True)
 class Puzzle:
     """A puzzle the fake serves: both images and the piece's `top` in px."""
@@ -140,8 +115,8 @@ class FakeDemo:
         self._target: int | None = None
         self._release = threading.Event()  # set on teardown, to free every hanging request
 
-        self._api = _Server(self._api_app())
-        self._site = _Server(self._site_app())
+        self._api = LocalServer(self._api_app())
+        self._site = LocalServer(self._site_app())
         self.url = self._site.origin + "/"
         self.api_origin = self._api.origin
 

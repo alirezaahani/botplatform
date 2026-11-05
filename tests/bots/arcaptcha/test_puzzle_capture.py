@@ -3,8 +3,13 @@
 from dataclasses import replace
 
 from botplatform.contract import Status
-from tests.conftest import FAST
-from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, create_reply
+from tests.bots.arcaptcha.conftest import FAST
+from tests.bots.arcaptcha.fake_demo.server import (
+    BACKGROUND_PNG,
+    CHALLENGE_ID,
+    PIECE_PNG,
+    create_reply,
+)
 
 
 def test_a_puzzle_is_saved_as_two_images_and_an_event(fake, run_bot):

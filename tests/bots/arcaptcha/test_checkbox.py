@@ -1,16 +1,14 @@
-"""How a run is judged from what the browser saw. Pure decisions: no Chrome."""
+"""What the `create` answers say about a run. A pure decision: no Chrome."""
 
 import pytest
 
 from botplatform.bots.arcaptcha.checkbox import classify_create
-from botplatform.bots.arcaptcha.login import verify_login
 from botplatform.contract import BotResult, Status
 
 BLOCKED = BotResult(Status.BLOCKED, "captcha_blocked")
 UNSOLVED = BotResult(Status.BLOCKED, "challenge_unsolved")
 NO_ID = BotResult(Status.FAILED, "missing_challenge_id")
 UNKNOWN_TYPE = "unknown_captcha_type"
-OK = "You are logged in successfully!"
 
 
 def create(captcha_type: str | None, challenge_id: str | None = "id-1") -> dict:
@@ -56,41 +54,3 @@ def test_an_unknown_captcha_type_is_named_so_it_can_be_looked_into():
     result = classify_create([create("hologram")], False)
     assert result is not None
     assert result.error == "captcha_type='hologram'"
-
-
-@pytest.mark.parametrize(
-    ("http_status", "body", "toast", "confirmed"),
-    [
-        pytest.param(200, {"msg": OK}, {"kind": "success", "text": OK}, True, id="both-agree"),
-        pytest.param(
-            200,
-            {"msg": OK},
-            {"kind": "success", "text": f"  {OK}  Bye"},
-            True,
-            id="toast-says-more",
-        ),
-        pytest.param(
-            401,
-            {"msg": "Wrong password"},
-            {"kind": "error", "text": "Wrong password"},
-            False,
-            id="refused",
-        ),
-        pytest.param(401, {"msg": OK}, {"kind": "success", "text": OK}, False, id="green-on-a-401"),
-        pytest.param(200, {"msg": OK}, {"kind": "error", "text": OK}, False, id="red-on-a-200"),
-        pytest.param(
-            200, {"msg": OK}, {"kind": "success", "text": "Other"}, False, id="other-text"
-        ),
-        pytest.param(200, {"msg": OK}, {"kind": "none", "text": ""}, False, id="no-toast"),
-        pytest.param(200, {}, {"kind": "success", "text": OK}, False, id="no-message"),
-        pytest.param(200, None, {"kind": "success", "text": OK}, False, id="body-not-json"),
-    ],
-)
-def test_a_login_counts_only_when_the_response_and_the_toast_agree(
-    http_status, body, toast, confirmed
-):
-    result = verify_login(http_status, body, toast)
-
-    assert (result is None) is confirmed
-    if not confirmed:
-        assert reason(result) == (Status.FAILED, "verification_failed")

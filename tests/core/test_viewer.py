@@ -17,7 +17,7 @@ from starlette.websockets import WebSocketDisconnect
 from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.web import live
 from botplatform.web.app import app
-from tests.fake_demo.server import _Server
+from tests.local_server import LocalServer
 
 
 def fake_novnc() -> FastAPI:
@@ -38,7 +38,7 @@ def fake_novnc() -> FastAPI:
 
 @pytest.fixture(scope="module")
 def upstream() -> Iterator[str]:
-    server = _Server(fake_novnc())
+    server = LocalServer(fake_novnc())
     server.start()
     yield server.origin
     server.stop()

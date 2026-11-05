@@ -1,11 +1,12 @@
-"""The pure path generators."""
+"""The path generators, and a real drag on a plain slider page."""
 
 import itertools
 import random
 
 import pytest
+from selenium.webdriver.common.by import By
 
-from botplatform.bots.utils.drag import MOVERS, duration, eased_path, linear_path
+from botplatform.bots.utils.drag import MOVERS, duration, eased_path, linear_path, perform_drag
 
 DXS = [0, 1, 7, 90, 130, 196]
 
@@ -62,3 +63,53 @@ def test_edge_distances():
     assert [x for x, _, _ in linear_path(0)] == [0] * 8
     assert eased_path(0, random.Random(3))[-1][0] == 0
     assert eased_path(196, random.Random(3))[-1][0] == 196
+
+
+# -- A real drag -----------------------------------------------------------------------------------
+
+# A handle that follows the pointer while pressed, unless `window.ignorePresses` is set.
+SLIDER = """<!doctype html>
+<div id="handle" style="position:absolute;left:0;top:100px;width:40px;height:40px"></div>
+<script>
+const handle = document.getElementById('handle');
+let start = null;
+handle.addEventListener('mousedown', (e) => { if (!window.ignorePresses) start = e.clientX; });
+document.addEventListener('mousemove', (e) => {
+  if (start !== null) handle.style.left = (e.clientX - start) + 'px';
+});
+document.addEventListener('mouseup', () => { start = null; });
+</script>"""
+LEFT_JS = "return parseFloat(document.getElementById('handle').style.left) || 0"
+DX = 120
+
+
+def drag_handle(driver, mover: str):
+    return perform_drag(
+        driver,
+        driver.find_element(By.ID, "handle"),
+        MOVERS[mover](DX, random.Random(1)),
+        lambda: {"left": driver.execute_script(LEFT_JS)},
+        lambda snapshot: snapshot["left"] > 0,
+    )
+
+
+@pytest.mark.parametrize("mover", list(MOVERS))
+def test_a_drag_moves_the_handle_by_dx(driver, local_page, mover):
+    local_page.html = SLIDER
+    driver.get(local_page.url)
+
+    result = drag_handle(driver, mover)
+
+    assert result.moved
+    assert result.final == {"left": DX}
+
+
+def test_a_handle_that_ignores_the_press_stops_the_drag_early(driver, local_page):
+    local_page.html = SLIDER
+    driver.get(local_page.url)
+    driver.execute_script("window.ignorePresses = true")
+
+    result = drag_handle(driver, "linear")
+
+    assert not result.moved
+    assert result.final == {"left": 0}

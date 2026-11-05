@@ -1,11 +1,11 @@
+"""The `create` body codec, against the test-only encoder. No Chrome."""
+
 import json
 
 import pytest
 
-from botplatform.bots.arcaptcha import BASELINE_BOT
 from botplatform.bots.arcaptcha.codec import decode_body
-from botplatform.bots.example import ExampleBot
-from tests.fake_demo.encoder import encode, encode_bytes
+from tests.bots.arcaptcha.fake_demo.encoder import encode, encode_bytes
 
 
 @pytest.mark.parametrize("padding", [0, 1, 7, 12])
@@ -33,8 +33,3 @@ def test_bad_padding_is_rejected():
 def test_garbage_is_rejected():
     with pytest.raises(ValueError):
         decode_body(b"this is not a captcha body at all")
-
-
-def test_declared_modes():
-    assert BASELINE_BOT.modes == ["headless", "headful"]
-    assert ExampleBot().modes == ["direct"]
