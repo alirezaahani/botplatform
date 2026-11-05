@@ -57,7 +57,7 @@ class ArcaptchaBot(Bot):
             profile = self.profile_for(ctx.mode)
             with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
                 session = Session(ctx, driver, username, password, self.url, self.timeouts, profile)
-                return run_flow(session, self.spec.solve_with)
+                return run_flow(session, self.spec.challenge)
         except Exception:  # noqa: BLE001 - every failure becomes an error result
             # The password must never reach the run's error field, whatever the exception says.
             host = urlsplit(self.url).hostname or ""

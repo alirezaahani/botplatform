@@ -2,6 +2,7 @@
 
 # ruff: noqa: F401
 
+from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.core import (
     BASELINE_BOT,
@@ -28,6 +29,7 @@ from botplatform.bots.arcaptcha.page import (
 from botplatform.bots.arcaptcha.puzzle import CapturedPuzzle
 from botplatform.bots.arcaptcha.redaction import redact
 from botplatform.bots.arcaptcha.session import DEMO_URL, Session
+from botplatform.bots.arcaptcha.solver import SliderSolver
 from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec, solver_spec
 from botplatform.bots.arcaptcha.timeouts import (
     DEFAULT_TIMEOUTS,

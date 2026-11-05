@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
+from botplatform.bots.arcaptcha.solver import SliderSolver
 from botplatform.profiles import (
     ALL_SIGNALS,
     ALL_SIGNALS_HEADLESS,
@@ -20,7 +22,8 @@ class BotSpec:
     profile: Profile = BASELINE
     # A profile for a mode, where `profile` is not right for every mode. Not listed: `profile`.
     profile_by_mode: dict[str, Profile] = field(default_factory=dict)
-    solve_with: tuple[str, str] | None = None  # (finder name, mover name); step 5 replaces it
+    # What the bot does when the widget shows a puzzle. Give up unless the spec says otherwise.
+    challenge: Challenge = field(default_factory=GiveUp)
 
 
 BASELINE_SPEC = BotSpec(
@@ -53,7 +56,7 @@ def solver_spec(finder: str, mover: str) -> BotSpec:
         modes=("headless", "headful"),
         profile=ALL_SIGNALS,
         profile_by_mode={"headful": ALL_SIGNALS, "headless": ALL_SIGNALS_HEADLESS},
-        solve_with=(finder, mover),
+        challenge=SliderSolver(finder, mover),
     )
 
 

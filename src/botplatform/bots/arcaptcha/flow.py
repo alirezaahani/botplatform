@@ -1,15 +1,18 @@
-"""The run, step by step: open and tick, solve a puzzle if there is one, log in, judge."""
+"""The run, step by step: open and tick, let the challenge deal with a puzzle, log in, judge."""
 
-from botplatform.bots.arcaptcha import page, solver
+from botplatform.bots.arcaptcha import page
+from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
 from botplatform.bots.arcaptcha.session import Session, screenshot
 from botplatform.bots.arcaptcha.timeouts import StepTimeout
 from botplatform.bots.arcaptcha.traffic import types
 from botplatform.contract import BotResult, Status
 
+UNSOLVED = BotResult(Status.BLOCKED, "challenge_unsolved")
 
-def run_flow(session: Session, solve_with: tuple[str, str] | None = None) -> BotResult:
+
+def run_flow(session: Session, challenge: Challenge | None = None) -> BotResult:
     try:
-        return _run(session, solve_with)
+        return _run(session, challenge or GiveUp())
     except StepTimeout as timeout:
         screenshot(session, f"timeout-{timeout.step}")
         return BotResult(Status.TIMEOUT, timeout.step, f"Timed out in step '{timeout.step}'")
@@ -18,11 +21,12 @@ def run_flow(session: Session, solve_with: tuple[str, str] | None = None) -> Bot
         raise
 
 
-def _run(session: Session, solve_with: tuple[str, str] | None) -> BotResult:
+def _run(session: Session, challenge: Challenge) -> BotResult:
     ctx = session.ctx
     ctx.event("browser_profile", session.profile.settings())
     earlier = page.open_and_tick(session)
-    earlier = _solve_if_puzzle(session, earlier, solve_with)
+    if earlier == UNSOLVED and types(session.creates)[-1:] == ["puzzle"]:
+        earlier = challenge.resolve(session)
     screenshot(session, "after-click")
     # Decision 3b: the login is always attempted, but it can never upgrade an earlier failure.
     try:
@@ -45,12 +49,3 @@ def _run(session: Session, solve_with: tuple[str, str] | None) -> BotResult:
         return earlier or verdict or BotResult(Status.SUCCESS, "solved")
     return earlier or verdict or BotResult(Status.SUCCESS)
 
-
-def _solve_if_puzzle(
-    session: Session, result: BotResult | None, solve_with: tuple[str, str] | None
-) -> BotResult | None:
-    """THE place where the flow hands over to a solver, for a bot that has one."""
-    unsolved = BotResult(Status.BLOCKED, "challenge_unsolved")
-    if solve_with and result == unsolved and types(session.creates)[-1] == "puzzle":
-        return solver.run_solver(session, solve_with)
-    return result
