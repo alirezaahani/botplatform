@@ -3,6 +3,7 @@
 # Run from the project root: .github/scripts/smoke.sh   (needs Docker and a .env, like `compose up`)
 #
 # Pass criteria:
+#   batch     one `example` run through `botplatform.batch`; the script fails if the batch exits non-zero.
 #   example   must end `success`.
 #   arcaptcha runs against the live site, so `success`, `blocked` and `failed` are all accepted
 #             (the outcome depends on ARCaptcha). `error` and `timeout` fail the check, and so does
@@ -66,6 +67,9 @@ launch_and_wait() {
   done
   echo "$bot|$mode|$run_id|$row"
 }
+
+echo "Running the batch runner once against the real queue"
+docker compose run --rm -T web python -m botplatform.batch --bots example --modes direct --runs 1 --pause 0
 
 results=()
 results+=("$(launch_and_wait example direct)")
