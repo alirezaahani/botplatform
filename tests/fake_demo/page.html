@@ -22,7 +22,7 @@
       getArcToken: () => challengeId,
     };
 
-    // The same cipher as botplatform/bots/arcaptcha_codec.py. Plain JSON is accepted too.
+    // The same cipher as botplatform/bots/arcaptcha/codec.py. Plain JSON is accepted too.
     function decode(buffer) {
       try {
         return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(buffer));

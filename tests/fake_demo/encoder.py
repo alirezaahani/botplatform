@@ -1,4 +1,4 @@
-"""Test-only encoder: the inverse of `botplatform.bots.arcaptcha_codec`.
+"""Test-only encoder: the inverse of `botplatform.bots.arcaptcha.codec`.
 
 It gives the fake `create` endpoint the same obfuscated bodies as the real widget API.
 """

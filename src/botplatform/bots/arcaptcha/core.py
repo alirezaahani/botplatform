@@ -24,6 +24,8 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 
+from botplatform.bots.arcaptcha.codec import decode_body
+from botplatform.bots.arcaptcha.images import sniff_image
 from botplatform.bots.arcaptcha.js import (
     BLANK_PASSWORD_JS,
     BROWSER_SIGNALS_JS,
@@ -32,7 +34,7 @@ from botplatform.bots.arcaptcha.js import (
     PUZZLE_INFO_JS,
     WIDGET_CHALLENGE_ID_JS,
 )
-from botplatform.bots.arcaptcha_codec import decode_body
+from botplatform.bots.arcaptcha.redaction import redact
 from botplatform.bots.selenium_support import (
     CapturedResponse,
     ResponseWatcher,
@@ -88,37 +90,6 @@ class StepTimeouts:
 
 
 DEFAULT_TIMEOUTS = StepTimeouts()
-
-
-def redact(text: str, password: str, keep: str) -> str:
-    """Replace the password everywhere except inside `keep`, such as the site's host name.
-
-    A short password like `demo` would otherwise turn `demo.arcaptcha.co` into nonsense.
-    Anywhere else, even a match followed by a dot, is replaced: over-redacting is fine.
-    """
-    if not keep:
-        return text.replace(password, "[password]")
-    return keep.join(part.replace(password, "[password]") for part in text.split(keep))
-
-
-IMAGE_TYPES = [
-    (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
-    (b"\xff\xd8\xff", "image/jpeg", "jpg"),
-    (b"GIF8", "image/gif", "gif"),
-]
-
-
-def sniff_image(data: bytes, header: str | None) -> tuple[str, str]:
-    """The content type and file extension of image bytes, from their first bytes."""
-    for magic, content_type, extension in IMAGE_TYPES:
-        if data.startswith(magic):
-            return content_type, extension
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp", "webp"
-    if header and header.startswith("image/"):
-        content_type = header.split(";")[0].strip()
-        return content_type, content_type.split("/")[1].split("+")[0]
-    return "application/octet-stream", "bin"
 
 
 @dataclass

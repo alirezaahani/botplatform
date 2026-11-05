@@ -2,6 +2,7 @@
 
 # ruff: noqa: F401
 
+from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.core import (
     ACCEPTED_TYPES,
     BLANK_PASSWORD_JS,
@@ -11,7 +12,6 @@ from botplatform.bots.arcaptcha.core import (
     DEFAULT_TIMEOUTS,
     DEMO_URL,
     FETCH_IMAGES_JS,
-    IMAGE_TYPES,
     LOGIN_BUTTON,
     POLL_SECONDS,
     PROFILE_BOTS,
@@ -26,9 +26,8 @@ from botplatform.bots.arcaptcha.core import (
     Scenario,
     StepTimeout,
     StepTimeouts,
-    decode_body,
     profile_bot,
-    redact,
-    sniff_image,
     solver_bot,
 )
+from botplatform.bots.arcaptcha.images import IMAGE_TYPES, sniff_image
+from botplatform.bots.arcaptcha.redaction import redact

@@ -3,7 +3,7 @@ import json
 import pytest
 
 from botplatform.bots.arcaptcha import ArcaptchaBot
-from botplatform.bots.arcaptcha_codec import decode_body
+from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.example import ExampleBot
 from tests.fake_demo.encoder import encode, encode_bytes
 
