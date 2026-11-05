@@ -27,6 +27,8 @@ class StepTimeouts:
     stuck_retries: int = 2
 
 
+POLL_SECONDS = 0.25
+
 DEFAULT_TIMEOUTS = StepTimeouts()
 
 
