@@ -33,7 +33,7 @@ def test_it_is_registered_by_name():
 def test_it_matches_the_cv_target_exactly_on_every_fixture(row):
     background, piece = load(row)
     found = find_gap_x_silhouette(background, piece, row["piece_top"])
-    assert found == row["cv_target"]
+    assert found == row["halo_target"]
     assert abs(found - row["human_answer"]) <= 5
 
 

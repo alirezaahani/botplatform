@@ -1,4 +1,4 @@
-"""The cv gap finder against eight real captured puzzles."""
+"""The halo gap finder against eight real captured puzzles."""
 
 import json
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from botplatform.solver import gap
-from botplatform.solver.gap import FINDERS, GapNotFound, find_gap_x_cv
+from botplatform.solver.gap import FINDERS, GapNotFound, find_gap_x_halo
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 MANIFEST = json.loads((DIR / "manifest.json").read_text())
@@ -19,22 +19,22 @@ def load(row: dict) -> tuple[bytes, bytes]:
 
 def test_the_manifest_has_the_eight_puzzles():
     assert len(MANIFEST) == 8
-    assert set(FINDERS) == {"cv", "silhouette"}
-    assert FINDERS["cv"] is find_gap_x_cv
+    assert set(FINDERS) == {"halo", "silhouette"}
+    assert FINDERS["halo"] is find_gap_x_halo
 
 
 @pytest.mark.parametrize("row", MANIFEST, ids=IDS)
 def test_cv_returns_the_expected_target_and_is_near_the_human_answer(row):
     background, piece = load(row)
-    target = find_gap_x_cv(background, piece, row["piece_top"])
-    assert target == row["cv_target"]
+    target = find_gap_x_halo(background, piece, row["piece_top"])
+    assert target == row["halo_target"]
     assert abs(target - row["human_answer"]) <= 5
 
 
 def test_the_piece_arguments_are_ignored():
     row = MANIFEST[0]
     background, _ = load(row)
-    assert find_gap_x_cv(background, b"", 0) == row["cv_target"]
+    assert find_gap_x_halo(background, b"", 0) == row["halo_target"]
 
 
 def test_a_blank_image_has_no_gap():
@@ -44,13 +44,13 @@ def test_a_blank_image_has_no_gap():
     ok, png = cv2.imencode(".png", np.full((160, 260, 3), 120, np.uint8))
     assert ok
     with pytest.raises(GapNotFound):
-        find_gap_x_cv(png.tobytes(), b"", 0)
+        find_gap_x_halo(png.tobytes(), b"", 0)
 
 
 @pytest.mark.parametrize("data", [b"", b"not an image at all", b"\x89PNG\r\n\x1a\ngarbage"])
 def test_garbage_bytes_have_no_gap(data):
     with pytest.raises(GapNotFound):
-        find_gap_x_cv(data, b"", 0)
+        find_gap_x_halo(data, b"", 0)
 
 
 @pytest.mark.parametrize("target", [-1, 197, 400])

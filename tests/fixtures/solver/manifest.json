@@ -5,7 +5,7 @@
     "piece": "578370f1-piece.png",
     "piece_top": 60,
     "human_answer": 58,
-    "cv_target": 60
+    "halo_target": 60
   },
   {
     "name": "6c3cc0fd",
@@ -13,7 +13,7 @@
     "piece": "6c3cc0fd-piece.png",
     "piece_top": 80,
     "human_answer": 90,
-    "cv_target": 90
+    "halo_target": 90
   },
   {
     "name": "75d5e12d",
@@ -21,7 +21,7 @@
     "piece": "75d5e12d-piece.png",
     "piece_top": 60,
     "human_answer": 101,
-    "cv_target": 100
+    "halo_target": 100
   },
   {
     "name": "c11962fb",
@@ -29,7 +29,7 @@
     "piece": "c11962fb-piece.png",
     "piece_top": 70,
     "human_answer": 131,
-    "cv_target": 130
+    "halo_target": 130
   },
   {
     "name": "c5dc69eb",
@@ -37,7 +37,7 @@
     "piece": "c5dc69eb-piece.png",
     "piece_top": 20,
     "human_answer": 166,
-    "cv_target": 170
+    "halo_target": 170
   },
   {
     "name": "de3139ec",
@@ -45,7 +45,7 @@
     "piece": "de3139ec-piece.png",
     "piece_top": 50,
     "human_answer": 169,
-    "cv_target": 170
+    "halo_target": 170
   },
   {
     "name": "f0af6952",
@@ -53,7 +53,7 @@
     "piece": "f0af6952-piece.png",
     "piece_top": 50,
     "human_answer": 101,
-    "cv_target": 100
+    "halo_target": 100
   },
   {
     "name": "f667f20b",
@@ -61,6 +61,6 @@
     "piece": "f667f20b-piece.png",
     "piece_top": 80,
     "human_answer": 128,
-    "cv_target": 130
+    "halo_target": 130
   }
 ]

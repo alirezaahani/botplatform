@@ -28,13 +28,13 @@ def test_the_registry_snapshot():
             ARC,
         ),
         (
-            "arcaptcha-solver-cv-linear",
-            "ARCaptcha demo (automatic solver: cv finder, linear movement)",
+            "arcaptcha-solver-halo-linear",
+            "ARCaptcha demo (automatic solver: halo finder, linear movement)",
             ARC,
         ),
         (
-            "arcaptcha-solver-cv-eased",
-            "ARCaptcha demo (automatic solver: cv finder, eased movement)",
+            "arcaptcha-solver-halo-eased",
+            "ARCaptcha demo (automatic solver: halo finder, eased movement)",
             ARC,
         ),
         (

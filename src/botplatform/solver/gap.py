@@ -43,7 +43,7 @@ def check_range(target: int) -> int:
     return target
 
 
-def find_gap_x_cv(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
+def find_gap_x_halo(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
     """The gap by image analysis of the background alone (the piece arguments are ignored).
 
     Uses the detection in `detect.py` on the background decoded in memory: the gap body
@@ -107,4 +107,4 @@ def find_gap_x_silhouette(background_png: bytes, piece_png: bytes, piece_top: in
     return check_range(best)
 
 
-FINDERS: dict[str, GapFinder] = {"cv": find_gap_x_cv, "silhouette": find_gap_x_silhouette}
+FINDERS: dict[str, GapFinder] = {"halo": find_gap_x_halo, "silhouette": find_gap_x_silhouette}

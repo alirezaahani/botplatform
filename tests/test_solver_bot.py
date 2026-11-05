@@ -16,7 +16,7 @@ from tests.fake_demo.server import Puzzle
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 ROW = json.loads((DIR / "manifest.json").read_text())[0]
-TARGET = ROW["cv_target"]
+TARGET = ROW["halo_target"]
 PUZZLE = Puzzle((DIR / ROW["background"]).read_bytes(), (DIR / ROW["piece"]).read_bytes(), top=60)
 IDS = [f"{i:030d}" for i in range(1, 6)]
 SOLVE = replace(FAST, puzzle_ready=6, puzzle_images=4, answer_settle=1.5, solve_attempts=3)
@@ -30,18 +30,18 @@ def fake_puzzles(fake):
 
 
 def finder_returning(monkeypatch, *targets):
-    """Make the `cv` finder answer with these targets in turn (the last one repeats)."""
+    """Make the `halo` finder answer with these targets in turn (the last one repeats)."""
     values = list(targets)
     monkeypatch.setitem(
         gap.FINDERS,
-        "cv",
+        "halo",
         lambda background, piece, top: values.pop(0) if len(values) > 1 else values[0],
     )
 
 
 # One run for each finder and each movement is enough: the bots differ only in these two names.
 @pytest.mark.parametrize(
-    "bot_id", ["arcaptcha-solver-cv-linear", "arcaptcha-solver-silhouette-eased"]
+    "bot_id", ["arcaptcha-solver-halo-linear", "arcaptcha-solver-silhouette-eased"]
 )
 def test_the_solver_drags_the_piece_to_the_gap_and_the_login_judges_the_run(
     fake_puzzles, run_bot, bot_id
@@ -61,7 +61,7 @@ def test_a_wrong_answer_brings_a_new_puzzle_and_the_next_attempt_can_succeed(
     fake_puzzles, run_bot, monkeypatch
 ):
     finder_returning(monkeypatch, 50, TARGET)
-    outcome = run_bot("arcaptcha-solver-cv-linear", timeouts=SOLVE)
+    outcome = run_bot("arcaptcha-solver-halo-linear", timeouts=SOLVE)
 
     assert outcome.verdict == (Status.SUCCESS, "solved")
     assert fake_puzzles.answers == [50, TARGET]
@@ -74,7 +74,7 @@ def test_the_solver_gives_up_after_its_attempts_are_all_rejected(
     fake_puzzles, run_bot, monkeypatch
 ):
     finder_returning(monkeypatch, 50)
-    outcome = run_bot("arcaptcha-solver-cv-linear", timeouts=replace(SOLVE, solve_attempts=2))
+    outcome = run_bot("arcaptcha-solver-halo-linear", timeouts=replace(SOLVE, solve_attempts=2))
 
     assert outcome.verdict == (Status.BLOCKED, "solve_failed")
     assert fake_puzzles.answers == [50, 50]
@@ -84,8 +84,8 @@ def test_when_no_gap_is_found_nothing_is_dragged(fake_puzzles, run_bot, monkeypa
     def finder(background, piece, top):
         raise gap.GapNotFound("test")
 
-    monkeypatch.setitem(gap.FINDERS, "cv", finder)
-    outcome = run_bot("arcaptcha-solver-cv-linear", timeouts=SOLVE)
+    monkeypatch.setitem(gap.FINDERS, "halo", finder)
+    outcome = run_bot("arcaptcha-solver-halo-linear", timeouts=SOLVE)
 
     assert outcome.verdict == (Status.BLOCKED, "gap_not_found")
     assert fake_puzzles.answers == []
@@ -93,7 +93,7 @@ def test_when_no_gap_is_found_nothing_is_dragged(fake_puzzles, run_bot, monkeypa
 
 def test_a_handle_that_ignored_the_press_is_pressed_again_on_the_same_puzzle(fake_puzzles, run_bot):
     fake_puzzles.serve_puzzles(PUZZLE, target=TARGET, ids=IDS, ignore_presses=1)
-    outcome = run_bot("arcaptcha-solver-cv-linear", timeouts=SOLVE)
+    outcome = run_bot("arcaptcha-solver-halo-linear", timeouts=SOLVE)
 
     assert outcome.verdict == (Status.SUCCESS, "solved")
     assert fake_puzzles.answers == [TARGET]
@@ -104,7 +104,7 @@ def test_a_handle_that_ignored_the_press_is_pressed_again_on_the_same_puzzle(fak
 def test_a_handle_that_never_responds_ends_the_run_without_an_answer(fake_puzzles, run_bot):
     fake_puzzles.serve_puzzles(PUZZLE, target=TARGET, ids=IDS, ignore_presses=99)
     outcome = run_bot(
-        "arcaptcha-solver-cv-linear", timeouts=replace(SOLVE, solve_attempts=1, stuck_retries=1)
+        "arcaptcha-solver-halo-linear", timeouts=replace(SOLVE, solve_attempts=1, stuck_retries=1)
     )
 
     assert outcome.verdict == (Status.BLOCKED, "solve_failed")

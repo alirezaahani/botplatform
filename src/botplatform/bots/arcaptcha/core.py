@@ -60,8 +60,8 @@ PROFILE_BOTS: list[ArcaptchaBot] = [
 ]
 
 SOLVER_BOTS: list[ArcaptchaBot] = [
-    ArcaptchaBot(solver_spec("cv", "linear")),
-    ArcaptchaBot(solver_spec("cv", "eased")),
+    ArcaptchaBot(solver_spec("halo", "linear")),
+    ArcaptchaBot(solver_spec("halo", "eased")),
     ArcaptchaBot(solver_spec("silhouette", "linear")),
     ArcaptchaBot(solver_spec("silhouette", "eased")),
 ]
