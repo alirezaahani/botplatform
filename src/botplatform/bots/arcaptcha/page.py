@@ -105,9 +105,18 @@ def log_in(session: Session) -> BotResult | None:
     except StepTimeout:
         toast = {"kind": "none", "text": ""}
     ctx.event("toast", toast)
+    return verify_login(login.status, body, toast)
+
+
+def verify_login(http_status: int, body: Any, toast: dict[str, str]) -> BotResult | None:
+    """None if the HTTP response and the toast both confirm the login, else `verification_failed`.
+
+    Both signals are needed: the status is 200 and the toast is a success toast that shows the
+    message from the response body.
+    """
     message = body.get("msg") if isinstance(body, dict) else None
     confirmed = (
-        login.status == 200
+        http_status == 200
         and toast["kind"] == "success"
         and isinstance(message, str)
         and message in toast["text"]
@@ -117,7 +126,7 @@ def log_in(session: Session) -> BotResult | None:
     return BotResult(
         Status.FAILED,
         "verification_failed",
-        f"Login returned HTTP {login.status} and the toast was '{toast['kind']}'",
+        f"Login returned HTTP {http_status} and the toast was '{toast['kind']}'",
     )
 
 
