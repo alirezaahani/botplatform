@@ -1,11 +1,9 @@
-"""The ARCaptcha demo bot: tick the checkbox, read `challenge_id`, log in, verify the result.
+"""The ARCaptcha bot: one class that runs the flow for whichever `BotSpec` it is built from.
 
-Puzzle capture (data for a future slider solver): when a `create` of type `puzzle` arrives and its
-two images are on screen, the run saves them as artifacts `puzzle-<n>-background.<ext>` and
-`puzzle-<n>-piece.<ext>` and records a `puzzle_captured` event (n counts puzzles in the run from 1).
-Events are appended in order, so the `answer_request` events that follow a `puzzle_captured`
-event, up to the next one, belong to puzzle n; the `answer` record itself is unchanged. A failed
-capture records `puzzle_capture_failed` and never changes the run's result.
+`run` reads the credentials, starts Chrome with the spec's profile for the run's mode, and hands a
+`Session` to `run_flow`. Any exception becomes an `unhandled_exception` result with the password
+removed from the text. The registered instances are at the bottom: the baseline, one bot for each
+other browser profile, and the solver bots.
 """
 
 import os

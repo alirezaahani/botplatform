@@ -62,8 +62,6 @@ class Session:
     creates: list[dict[str, Any]] = field(default_factory=list)  # decoded `create` answers
     logins: list[CapturedResponse] = field(default_factory=list)
     answer_records: list[dict[str, Any]] = field(default_factory=list)  # every `answer`, in order
-    # When the latest `answer` arrived, unless a new `create` followed it.
-    answered_at: float | None = None
     pending_puzzle: tuple[str | None] | None = None  # set by a `create`, taken by `drain`
     puzzles: int = 0  # puzzles seen so far, captured or not
     puzzle_srcs: list[str] = field(default_factory=list)  # image srcs already taken

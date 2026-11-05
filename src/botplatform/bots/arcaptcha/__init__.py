@@ -1,40 +1,22 @@
-"""The ARCaptcha demo bots. Names that other modules and tests import are re-exported here."""
-
-# ruff: noqa: F401
+"""The ARCaptcha demo bots: one `ArcaptchaBot` class, built from a `BotSpec` for each variant."""
 
 from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
-from botplatform.bots.arcaptcha.codec import decode_body
-from botplatform.bots.arcaptcha.core import (
-    BASELINE_BOT,
-    PROFILE_BOTS,
-    SOLVER_BOTS,
-    ArcaptchaBot,
-)
-from botplatform.bots.arcaptcha.flow import run_flow
-from botplatform.bots.arcaptcha.images import IMAGE_TYPES, sniff_image
-from botplatform.bots.arcaptcha.js import (
-    BLANK_PASSWORD_JS,
-    BROWSER_SIGNALS_JS,
-    FETCH_IMAGES_JS,
-    PUZZLE_INFO_JS,
-    WIDGET_CHALLENGE_ID_JS,
-)
-from botplatform.bots.arcaptcha.page import (
-    CHECKBOX,
-    LOGIN_BUTTON,
-    TOAST,
-    TOAST_ERROR,
-    TOAST_SUCCESS,
-)
-from botplatform.bots.arcaptcha.puzzle import CapturedPuzzle
-from botplatform.bots.arcaptcha.redaction import redact
-from botplatform.bots.arcaptcha.session import DEMO_URL, Session
+from botplatform.bots.arcaptcha.core import BASELINE_BOT, PROFILE_BOTS, SOLVER_BOTS, ArcaptchaBot
 from botplatform.bots.arcaptcha.solver import SliderSolver
 from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec, solver_spec
-from botplatform.bots.arcaptcha.timeouts import (
-    DEFAULT_TIMEOUTS,
-    POLL_SECONDS,
-    StepTimeout,
-    StepTimeouts,
-)
-from botplatform.bots.arcaptcha.traffic import ACCEPTED_TYPES, CHALLENGE_TYPES
+from botplatform.bots.arcaptcha.timeouts import StepTimeouts
+
+__all__ = [
+    "BASELINE_BOT",
+    "BASELINE_SPEC",
+    "PROFILE_BOTS",
+    "SOLVER_BOTS",
+    "ArcaptchaBot",
+    "BotSpec",
+    "Challenge",
+    "GiveUp",
+    "SliderSolver",
+    "StepTimeouts",
+    "profile_spec",
+    "solver_spec",
+]

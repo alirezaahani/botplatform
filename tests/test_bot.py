@@ -12,14 +12,9 @@ from dataclasses import replace
 import pytest
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha import (
-    BASELINE_BOT,
-    BASELINE_SPEC,
-    ArcaptchaBot,
-    Session,
-    core,
-    run_flow,
-)
+from botplatform.bots.arcaptcha import BASELINE_BOT, BASELINE_SPEC, ArcaptchaBot, core
+from botplatform.bots.arcaptcha.flow import run_flow
+from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext

@@ -1,7 +1,6 @@
 """Network responses: reading them off the watcher, recording them and classifying `create`s."""
 
 import json
-import time
 from typing import Any
 
 from botplatform.bots.arcaptcha.codec import decode_body
@@ -24,7 +23,6 @@ def drain(session: Session) -> bool:
         if response.name == "login":
             session.logins.append(response)
         elif response.name == "answer":
-            session.answered_at = time.monotonic()
             record = exchange_record(response)
             session.answer_records.append(record)
             session.ctx.event("answer_request", record)
@@ -59,7 +57,6 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
     if challenge_id:
         session.ctx.record_challenge_id(challenge_id)
     session.capture = None
-    session.answered_at = None  # a new puzzle after an answer means the answer was not final
     session.ctx.event("create_response", info)
     session.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
 

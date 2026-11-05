@@ -48,4 +48,3 @@ def _run(session: Session, challenge: Challenge) -> BotResult:
     if session.solved:
         return earlier or verdict or BotResult(Status.SUCCESS, "solved")
     return earlier or verdict or BotResult(Status.SUCCESS)
-
