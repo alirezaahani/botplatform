@@ -187,8 +187,8 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-45 passed in 43.66s      (Chrome tests, 4 workers)
-180 passed, 46 deselected in 11.15s    (everything else)
+45 passed in 37.81s      (Chrome tests, 4 workers)
+163 passed, 46 deselected in 9.95s    (everything else)
 (the live test is never run by this command)
 ```
 
@@ -216,7 +216,7 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions b
 | Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
 | Stats page | `tests/test_stats_page.py` (8 tests): counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns including a run with none | counts, rate and columns |
 | Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Stats page list the newest bot first | page and stats order |
-| Puzzle capture | `tests/test_puzzle_capture.py` (2 tests): a puzzle is saved as two artifacts and an event, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
+| Puzzle capture | `tests/test_puzzle_capture.py` (3 tests): a puzzle is saved as two artifacts and an event, images without a content type are saved as `.bin`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
 | Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
 | Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
 | Solver bots | `tests/test_solver_bot.py` (11 tests): a cv/linear and a silhouette/eased bot solve a real fixture puzzle on the fake page, each solver bot picks its profile by mode, a wrong first target is rejected and then solved, all attempts rejected ends `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
