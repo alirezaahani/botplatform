@@ -154,7 +154,7 @@ Each worker runs one bot at a time and claims runs from the database queue, so n
 docker compose -f compose.test.yaml run --rm --build tests
 ```
 
-This needs only Docker and no `.env`. It uses its own project name and a throwaway Postgres, so it never touches the main stack. The bot tests run real Chrome against a fake ARCaptcha demo page served by pytest. The fake can return any outcome on demand (a block, a puzzle, a hang, a dropped connection), so every failure path is repeatable without the live site.
+It runs the Chrome tests on four parallel workers and then the database tests one after the other (they share one database). This needs only Docker and no `.env`. It uses its own project name and a throwaway Postgres, so it never touches the main stack. The bot tests run real Chrome against a fake ARCaptcha demo page served by pytest. The fake can return any outcome on demand (a block, a puzzle, a hang, a dropped connection), so every failure path is repeatable without the live site.
 
 To check the fake against the real site, run the live test (needs internet):
 
@@ -167,38 +167,39 @@ CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launch
 Real output of the test command:
 
 ```
-=========== 228 passed, 1 deselected, 1 warning in 307.80s (0:05:07) ===========
-(the deselected test is the live test)
+45 passed in 38.54s      (Chrome tests, 4 workers)
+179 passed, 45 deselected in 19.78s   (everything else)
+(the live test is deselected in both)
 ```
 
 ### What the tests cover
 
-Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases are in the other files. The bonus work adds the rows at the end of the table. Each row lists the status and reason that the test asserts.
+Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions behind them (which `create` answers block, which login responses count) are in `tests/test_verdicts.py` and need no Chrome. Platform cases are in the other files. The bonus work adds the rows at the end of the table. Each row lists the status and reason that the test asserts.
 
 | Case | Test | Result |
 |---|---|---|
-| Main success workflow | `test_accepted_checkbox_then_confirmed_login_succeeds` (types `accept` and `cookie`), `test_softban_with_confirmed_login_succeeds` | `success` |
-| Missing `challenge_id` | `test_accept_without_id_fails` | `failed`, `missing_challenge_id` |
-| CAPTCHA blocking | `test_block_with_id_records_the_id_and_still_logs_in`, `test_block_without_id`, `test_successful_login_never_upgrades_a_block` | `blocked`, `captcha_blocked` |
-| Puzzle or unsolved challenge | `test_challenges_are_blocked_as_unsolved` | `blocked`, `challenge_unsolved` |
-| Step timeouts | `test_page_load_hang`, `test_checkbox_missing`, `test_create_hang`, `test_login_response_hang` | `timeout`, reason is the step: `load_page`, `find_checkbox`, `create_response`, `login_response` |
+| Main success workflow | `test_an_accepted_checkbox_then_a_confirmed_login_succeeds` (types `accept` and `cookie`), `test_a_softban_is_judged_by_the_login_alone` | `success` |
+| Missing `challenge_id` | `test_what_the_create_answers_say_about_the_run` (`test_verdicts.py`), `test_a_create_body_nobody_can_decode_fails_without_crashing` | `failed`, `missing_challenge_id` |
+| CAPTCHA blocking | `test_a_block_still_logs_in_and_a_good_login_never_upgrades_it` | `blocked`, `captcha_blocked` |
+| Puzzle or unsolved challenge | `test_a_puzzle_no_one_solves_ends_blocked_but_still_tries_the_login`, and the `puzzle`, `question` and `2fa` cases in `test_verdicts.py` | `blocked`, `challenge_unsolved` |
+| Step timeouts | `test_a_step_that_never_finishes_times_out_with_its_name` (page, checkbox, create, login) | `timeout`, reason is the step: `load_page`, `find_checkbox`, `create_response`, `login_response` |
 | Whole-run timeout | `test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit` in `tests/test_worker.py` | `timeout`, `run_time_limit` |
-| Unsuccessful form verification | `test_softban_with_rejected_login_fails_verification`, `test_login_not_confirmed_by_both_signals_fails` | `failed`, `verification_failed` |
-| Dropped connections | `test_create_connection_dropped_is_an_error_straight_away`, `test_login_connection_dropped_is_an_error`, `test_create_api_origin_refuses_connections` | `error`, `create_request_failed` or `login_request_failed` |
-| Dropped login after a block | `test_blocked_run_whose_login_is_dropped_stays_blocked`, `test_blocked_run_whose_login_hangs_stays_blocked` | `blocked`, `captcha_blocked` |
+| Unsuccessful form verification | `test_a_login_the_page_does_not_confirm_fails_verification`, and `test_a_login_counts_only_when_the_response_and_the_toast_agree` in `test_verdicts.py` | `failed`, `verification_failed` |
+| Dropped connections | `test_a_failed_create_request_is_an_error_straight_away`, `test_a_dropped_login_is_an_error_unless_the_run_already_failed` | `error`, `create_request_failed` or `login_request_failed` |
+| Dropped login after a block | `test_a_dropped_login_is_an_error_unless_the_run_already_failed` (after a block), `test_a_blocked_run_whose_login_hangs_stays_blocked` | `blocked`, `captcha_blocked` |
 | Queue claim | `test_claim_is_fifo`, `test_claim_marks_the_run_running_with_a_lease`, `test_concurrent_claims_never_duplicate_or_lose_a_run` in `tests/test_queue.py` | one claim per run |
 | Leases and reaping | `test_renew_extends_the_lease`, `test_reap_expired_marks_only_expired_running_runs`, `test_a_late_finish_after_reaping_changes_nothing` in `tests/test_queue.py`; `test_the_lease_is_renewed_while_the_child_runs`, `test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status` in `tests/test_worker.py` | `error`, `worker_lost` |
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
-| Browser profiles | `tests/test_profiles.py` (26 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; every profile has a registered bot; the run records the profile, the browser signals and the decoded `create` request | profile and recording rules |
+| Browser profiles | `tests/test_profiles.py` (12 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; the run records the profile, the browser signals and the decoded `create` request. `tests/test_registry.py` (6 tests): the registry's ids, names and modes in order, every profile has a registered bot, `validate`'s rules | profile and registry rules |
 | Batch runner | `tests/test_batch.py` (13 tests): plan size and seeded shuffle, pause and jitter, the early stop, Ctrl-C, a run that never finishes, and a batch against the real queue with a stand-in worker | batch output and stop rules |
 | Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
 | Bonus report | `tests/test_bonus.py` (6 tests): per bot and mode counts, the first `create` answer only, viewer runs excluded, `?since=` and `?bot=`, `/bonus.md` header, empty history | rates and filters |
-| Newest first | `tests/test_order.py` (4 tests): the `BOTS` order, `publish` sets and updates `position`, the Bots page and the Bonus report list the newest bot first | page and report order |
-| Puzzle capture | `tests/test_puzzle_capture.py` (4 tests): a puzzle is saved as two artifacts and an event, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
+| Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Bonus report list the newest bot first | page and report order |
+| Puzzle capture | `tests/test_puzzle_capture.py` (2 tests): a puzzle is saved as two artifacts and an event, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
 | Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
 | Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
-| Solver bots | `tests/test_solver_bot.py` (16 tests): all four bots solve a real fixture puzzle on the fake page, each mode gets its own browser profile, a headless run uses the headless profile and still solves, a wrong first target is rejected and then solved, three rejections end `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
+| Solver bots | `tests/test_solver_bot.py` (11 tests): a cv/linear and a silhouette/eased bot solve a real fixture puzzle on the fake page, each solver bot picks its profile by mode, a wrong first target is rejected and then solved, all attempts rejected ends `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
 
 ## Adding a bot
 
