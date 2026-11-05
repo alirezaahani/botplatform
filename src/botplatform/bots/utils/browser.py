@@ -105,6 +105,15 @@ def do(session: BrowserSession, action: Callable[[], Any], *, retry: bool = True
     return action()
 
 
+def raise_if_alert_open(driver: webdriver.Chrome) -> None:
+    """Raise `UnexpectedAlertPresentException` if a JS `alert()` is open, for `do` to handle.
+
+    An open alert freezes the page, and some reads never notice it, such as Chrome's network log.
+    Call this before such a read: any ordinary driver command raises while an alert is open.
+    """
+    driver.execute_script("return 0")
+
+
 def wait_for(session: BrowserSession, check: Callable[[], Any], seconds: float, step: str) -> Any:
     deadline = time.monotonic() + seconds
     while True:

@@ -5,14 +5,13 @@ from typing import Any
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.puzzle_capture import capture_puzzle
 from botplatform.bots.arcaptcha.session import Session
+from botplatform.bots.utils.browser import raise_if_alert_open
 from botplatform.bots.utils.network import CapturedResponse, exchange_record
 
 
 def drain(session: Session) -> bool:
     """Read new network responses. Each `create` is recorded the moment it is seen."""
-    # Reading the network log never notices a JS `alert()`, and an open alert freezes the
-    # page. Any other driver command raises when one is open, which `do` then handles.
-    session.driver.title  # noqa: B018
+    raise_if_alert_open(session.driver)  # the network log alone would not notice one
     seen_create = False
     for response in session.watcher.poll():
         if response.name == "login":

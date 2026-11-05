@@ -13,6 +13,7 @@ from botplatform.bots.utils.browser import (
     StepTimeout,
     describe,
     do,
+    raise_if_alert_open,
     wait_for,
 )
 from botplatform.bots.utils.profiles import BASELINE, STEALTH_FLAGS
@@ -68,6 +69,16 @@ def test_do_without_retry_does_not_repeat_the_call_after_an_alert(driver, local_
     assert do(BrowserSession(ctx, driver), click, retry=False) is None
     assert len(calls) == 1
     assert ctx.one("alert") == {"text": "hello"}
+
+
+def test_an_open_alert_is_noticed_before_a_read_that_cannot_see_it(driver, local_page):
+    ctx = RecordingContext()
+    open_alert(driver, local_page)
+
+    do(BrowserSession(ctx, driver), lambda: raise_if_alert_open(driver))
+
+    assert ctx.one("alert") == {"text": "hello"}
+    raise_if_alert_open(driver)  # dismissed: nothing is open any more
 
 
 def test_wait_for_returns_the_first_truthy_result(driver):
