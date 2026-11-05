@@ -27,11 +27,6 @@ class Profile:
         }
 
 
-def bot_id(profile_name: str) -> str:
-    """The id of the registered bot that runs `profile_name`. The baseline keeps the plain id."""
-    return "arcaptcha" if profile_name == "baseline" else f"arcaptcha-{profile_name}"
-
-
 BASELINE = Profile("baseline", "Plain Chrome for Testing driven by Selenium, no changes.")
 
 STEALTH_FLAGS = Profile(

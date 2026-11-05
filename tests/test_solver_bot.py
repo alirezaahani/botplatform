@@ -9,7 +9,7 @@ import pytest
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import SOLVER_BOTS
 from botplatform.contract import Status
-from botplatform.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
+from botplatform.bots.utils.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
 from botplatform.solver import gap
 from tests.conftest import FAST
 from tests.fake_demo.server import Puzzle

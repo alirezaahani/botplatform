@@ -14,7 +14,7 @@ from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec
 from botplatform.bots.arcaptcha.timeouts import DEFAULT_TIMEOUTS, StepTimeouts
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Bot, BotResult, RunContext, Status
-from botplatform.profiles import BASELINE, PROFILES, Profile
+from botplatform.bots.utils.profiles import BASELINE, PROFILES, Profile
 
 
 class ArcaptchaBot(Bot):

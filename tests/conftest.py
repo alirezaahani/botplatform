@@ -16,7 +16,7 @@ from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
 from botplatform.contract import Bot, BotResult, Status
 from botplatform.db import Base, BotRecord, Run, SessionLocal, engine
-from botplatform.profiles import Profile
+from botplatform.bots.utils.profiles import Profile
 from tests.fake_demo.server import FakeDemo
 
 USERNAME = "tester@example.com"

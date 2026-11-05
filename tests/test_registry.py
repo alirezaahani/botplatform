@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot
 from botplatform.db import BotRecord, SessionLocal
-from botplatform.profiles import PROFILES
+from botplatform.bots.utils.profiles import PROFILES
 from botplatform.worker.registry import publish, validate
 from tests.conftest import stub_bot
 

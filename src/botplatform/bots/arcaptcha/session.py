@@ -17,7 +17,7 @@ from botplatform.bots.arcaptcha.timeouts import (
 )
 from botplatform.bots.selenium_support import ResponseWatcher, describe
 from botplatform.contract import RunContext
-from botplatform.profiles import BASELINE, Profile
+from botplatform.bots.utils.profiles import BASELINE, Profile
 
 DEMO_URL = "https://demo.arcaptcha.co/"
 

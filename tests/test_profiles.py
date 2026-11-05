@@ -8,7 +8,7 @@ import pytest
 from botplatform.bots.arcaptcha import js
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
-from botplatform.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
+from botplatform.bots.utils.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
 
 SIGNAL_KEYS = {
     "webdriver", "user_agent", "platform", "languages", "plugins", "mime_types",

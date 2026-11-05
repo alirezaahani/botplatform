@@ -4,13 +4,12 @@ from dataclasses import dataclass, field
 
 from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
 from botplatform.bots.arcaptcha.solver import SliderSolver
-from botplatform.profiles import (
-    ALL_SIGNALS,
-    ALL_SIGNALS_HEADLESS,
-    BASELINE,
-    Profile,
-    bot_id,
-)
+from botplatform.bots.utils.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS, BASELINE, Profile
+
+
+def bot_id(profile_name: str) -> str:
+    """The id of the registered bot that runs `profile_name`. The baseline keeps the plain id."""
+    return "arcaptcha" if profile_name == "baseline" else f"arcaptcha-{profile_name}"
 
 
 @dataclass(frozen=True)

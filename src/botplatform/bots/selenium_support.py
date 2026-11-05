@@ -11,7 +11,7 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.service import Service
 
-from botplatform.profiles import BASELINE, Profile
+from botplatform.bots.utils.profiles import BASELINE, Profile
 
 
 def describe(error: Exception, limit: int = 200) -> str:
