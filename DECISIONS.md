@@ -470,7 +470,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `detect.py` the gap detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-halo-linear` and `arcaptcha-solver-halo-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `halo` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `detect.py` the gap detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
@@ -488,7 +488,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 **Rejected alternative:** rebuilding each background by taking the per-pixel mode over about 100 samples per background type and subtracting it. It is simpler, but fragile (it breaks with any new background) and needs reference data shipped with the code.
 
-**Live result:** the `cv` bots solved 16 of 16 live runs on attempt 1 (6 in a smoke batch, 10 in the comparison below). The fake demo accepts an answer equal to a known target, so the tests show our own logic; the live runs are what show the site accepts these paths. See the next section and `evidence/solver/results-headful-2x2.md`.
+**Live result:** the `halo` bots solved 16 of 16 live runs on attempt 1 (6 in a smoke batch, 10 in the comparison below). The fake demo accepts an answer equal to a known target, so the tests show our own logic; the live runs are what show the site accepts these paths. See the next section and `evidence/solver/results-headful-2x2.md`.
 
 ### Stats page replaces the bonus report
 
@@ -514,17 +514,17 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
-**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `botplatform/solver/gap.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
+**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `botplatform/solver/gap.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `halo` bots the four bots are a 2x2 of finder x movement for the live comparison.
 
 **Method:** one-dimensional silhouette matching. The piece's row (`piece_top`) and exact shape (its alpha channel, pixels above 128) are known, so only x is unknown. For each x in 0..196 the score is the mean brightness of a thin ring (about 2 px) just outside the silhouette, minus the mean brightness inside it, using `cv2.matchTemplate` on the grayscale strip of the background. The answer is the best x. It raises `GapNotFound` if the best score is under 40 gray levels or does not beat every x at least 8 px away by 20. About 60 lines, OpenCV and numpy only, bytes in memory.
 
-**Why it is a useful comparison:** it is an independent method. It does not use `find_piece_mask` or `body_left`, so it does not depend on the halo detector or on the "body square minus 10" rule. It needs no reference data. It uses the piece image, which the `cv` finder ignores. If the two finders agree on a puzzle that is good evidence for both; if they disagree, the live result shows which one the site accepts.
+**Why it is a useful comparison:** it is an independent method. It does not use `find_piece_mask` or `body_left`, so it does not depend on the halo detector or on the "body square minus 10" rule. It needs no reference data. It uses the piece image, which the `halo` finder ignores. If the two finders agree on a puzzle that is good evidence for both; if they disagree, the live result shows which one the site accepts.
 
 **Choice of score:** four simple scores were tried on the 8 fixtures before any bot was registered: edge strength along the outline, ring minus inside, a wider ring minus inside, and ring minus wider ring. The first two were exact on 8 of 8 (the others were off by up to 2 px). Ring minus inside was kept because it follows what the gap looks like (light halo, dark interior). No tuning beyond that.
 
-**Offline comparison with the fixtures** (`cv_target` is the other finder's answer; "score" is the best ring-minus-inside, "lead" is its margin over the best x at least 8 px away):
+**Offline comparison with the fixtures** (`halo_target` is the other finder's answer; "score" is the best ring-minus-inside, "lead" is its margin over the best x at least 8 px away):
 
-| fixture | silhouette | cv_target | human | diff cv | diff human | score | lead |
+| fixture | silhouette | halo_target | human | diff halo | diff human | score | lead |
 |---|---|---|---|---|---|---|---|
 | 578370f1 | 60 | 60 | 58 | 0 | +2 | 133.5 | 96.8 |
 | 6c3cc0fd | 90 | 90 | 90 | 0 | 0 | 138.2 | 81.9 |
@@ -535,11 +535,11 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 | f0af6952 | 100 | 100 | 101 | 0 | -1 | 161.3 | 100.9 |
 | f667f20b | 130 | 130 | 128 | 0 | +2 | 136.1 | 85.6 |
 
-Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv_target 8 of 8, within 9 px 8 of 8. Against the human answers the largest difference is 4 px. Both background types are among the fixtures and neither failed. The thresholds sit far from both sides: real puzzles scored 119..161 with a lead of 82..106, while blank, smooth, gradient and random-noise backgrounds scored at most 7.2 with a lead under 0.5.
+Exact match with `halo_target`: 8 of 8; largest difference 0 px; within 4 px of halo_target 8 of 8, within 9 px 8 of 8. Against the human answers the largest difference is 4 px. Both background types are among the fixtures and neither failed. The thresholds sit far from both sides: real puzzles scored 119..161 with a lead of 82..106, while blank, smooth, gradient and random-noise backgrounds scored at most 7.2 with a lead under 0.5.
 
-**Known limits:** the fixtures are only 8 puzzles, and the `cv_target` is the other finder's answer, not the site's, so agreement shows consistency, not correctness. The method relies on the halo being brighter than the gap interior; a background with a very bright interior, or a gap whose halo is lost in a bright area, could fail or pick another place, and it would then rather answer wrongly with a high score than raise. It needs the piece's row and alpha to be right (a piece with no alpha or a row outside the image raises `GapNotFound`). The accepted tolerance of the site is under 10 px; this finder is exact on the fixtures, but that is the same data the method was chosen on.
+**Known limits:** the fixtures are only 8 puzzles, and the `halo_target` is the other finder's answer, not the site's, so agreement shows consistency, not correctness. The method relies on the halo being brighter than the gap interior; a background with a very bright interior, or a gap whose halo is lost in a bright area, could fail or pick another place, and it would then rather answer wrongly with a high score than raise. It needs the piece's row and alpha to be right (a piece with no alpha or a row outside the image raises `GapNotFound`). The accepted tolerance of the site is under 10 px; this finder is exact on the fixtures, but that is the same data the method was chosen on.
 
-**Live results (headful, 2026-11-04):** the 2x2 was run interleaved, 10 rounds of the four bots, 40 runs in all. Every run ended `success` / `solved` and every run was solved on attempt 1: 10 of 10 for each of `cv-linear`, `cv-eased`, `silhouette-linear` and `silhouette-eased`. Median run 15.7 to 16.0 s; drag time 0.6 s (linear) against about 1.2 s (eased). The runs covered 13 different gap positions. Table, method and per-run rows: `evidence/solver/results-headful-2x2.md` and `runs-headful.json`.
+**Live results (headful, 2026-11-04):** the 2x2 was run interleaved, 10 rounds of the four bots, 40 runs in all. Every run ended `success` / `solved` and every run was solved on attempt 1: 10 of 10 for each of `halo-linear`, `halo-eased`, `silhouette-linear` and `silhouette-eased`. Median run 15.7 to 16.0 s; drag time 0.6 s (linear) against about 1.2 s (eased). The runs covered 13 different gap positions. Table, method and per-run rows: `evidence/solver/results-headful-2x2.md` and `runs-headful.json`.
 
 **Headless:** the same 2x2 was then run in headless mode with the `all-signals-headless` profile: another 40 of 40 `success` / `solved`, all on attempt 1 (medians 14.7 to 16.3 s). See `evidence/solver/results-headless-2x2.md` and `runs-headless.json`. Together that is 80 of 80 runs.
 

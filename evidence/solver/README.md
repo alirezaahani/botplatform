@@ -43,7 +43,7 @@ Live results (2026-11-04): both methods moved the real handle, the handle's and 
 
 ## Reading `solve_attempt` events (`arcaptcha-solver-<finder>-<mover>`)
 
-The four solver bots are `arcaptcha-solver-cv-linear`, `arcaptcha-solver-cv-eased`, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (finder x movement). The `finder` field of `solve_attempt` says which finder gave the target.
+The four solver bots are `arcaptcha-solver-halo-linear`, `arcaptcha-solver-halo-eased`, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (finder x movement). The `finder` field of `solve_attempt` says which finder gave the target.
 
 The automatic solver records `solve_started` (finder, mover, attempt cap, stuck retries, `puzzle_ready`), one `solve_attempt` per answer it makes, and `solve_finished` (`reason`: `solved`, `solve_failed`, `gap_not_found`, `not_a_puzzle`, or a step name such as `puzzle_ready` when it timed out).
 
