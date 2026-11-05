@@ -496,7 +496,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
-**What:** a second finder, `silhouette` (`botplatform/solver/silhouette.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
+**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `botplatform/solver/gap.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
 
 **Method:** one-dimensional silhouette matching. The piece's row (`piece_top`) and exact shape (its alpha channel, pixels above 128) are known, so only x is unknown. For each x in 0..196 the score is the mean brightness of a thin ring (about 2 px) just outside the silhouette, minus the mean brightness inside it, using `cv2.matchTemplate` on the grayscale strip of the background. The answer is the best x. It raises `GapNotFound` if the best score is under 40 gray levels or does not beat every x at least 8 px away by 20. About 60 lines, OpenCV and numpy only, bytes in memory.
 

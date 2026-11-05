@@ -1,5 +1,6 @@
 """The web UI. It reads and queues runs through the database, and never imports bot code."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -13,7 +14,7 @@ from sqlalchemy import func, select
 from botplatform.contract import ACTIVE_STATUSES, Status
 from botplatform.db import BotRecord, Run, RunArtifact, RunEvent
 from botplatform.web import live, stats
-from botplatform.web.deps import DbSession, parse_id
+from botplatform.web.deps import DbSession
 from botplatform.worker import queue
 
 HERE = Path(__file__).parent
@@ -94,8 +95,8 @@ def list_runs(
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
-def run_detail(run_id: str, request: Request, session: DbSession) -> HTMLResponse:
-    run = session.get(Run, parse_id(run_id))
+def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLResponse:
+    run = session.get(Run, run_id)
     if run is None:
         raise HTTPException(404, "No such run")
     events = session.scalars(
@@ -126,8 +127,8 @@ def run_detail(run_id: str, request: Request, session: DbSession) -> HTMLRespons
 
 
 @app.get("/artifacts/{artifact_id}")
-def artifact(artifact_id: str, session: DbSession) -> Response:
-    item = session.get(RunArtifact, parse_id(artifact_id, "No such artifact"))
+def artifact(artifact_id: uuid.UUID, session: DbSession) -> Response:
+    item = session.get(RunArtifact, artifact_id)
     if item is None:
         raise HTTPException(404, "No such artifact")
     return Response(item.data, media_type=item.content_type)

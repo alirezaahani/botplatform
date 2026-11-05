@@ -166,20 +166,16 @@ def test_proxy_refuses_an_unknown_run(client: TestClient) -> None:
     assert client.get(f"/runs/{uuid.uuid4()}/live", follow_redirects=False).status_code == 404
 
 
-def test_a_run_id_that_is_not_a_uuid_is_a_404(client: TestClient) -> None:
+def test_an_id_that_is_not_a_uuid_is_refused(client: TestClient) -> None:
     for path in ("/runs/not-a-uuid", "/runs/not-a-uuid/live", "/runs/not-a-uuid/live/x"):
-        response = client.get(path, follow_redirects=False)
-        assert response.status_code == 404
-        assert response.json() == {"detail": "No such run"}
+        assert client.get(path, follow_redirects=False).status_code == 422
+    assert client.get("/artifacts/not-a-uuid").status_code == 422
     with (
         pytest.raises(WebSocketDisconnect) as closed,
         client.websocket_connect("/runs/not-a-uuid/live/websockify"),
     ):
         pass
     assert closed.value.code == 1008
-    response = client.get("/artifacts/not-a-uuid")
-    assert response.status_code == 404
-    assert response.json() == {"detail": "No such artifact"}
 
 
 @pytest.mark.parametrize(

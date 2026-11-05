@@ -8,11 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from selenium import webdriver
-from selenium.common.exceptions import (
-    NoAlertPresentException,
-    UnexpectedAlertPresentException,
-    WebDriverException,
-)
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.service import Service
 
 from botplatform.profiles import BASELINE, Profile
@@ -24,34 +20,6 @@ def describe(error: Exception, limit: int = 200) -> str:
     first = lines[0][:limit] if lines else ""
     name = type(error).__name__
     return f"{name}: {first}" if first else name
-
-
-def call_handling_alerts[T](
-    driver: webdriver.Chrome,
-    action: Callable[[], T],
-    on_alert: Callable[[str], None],
-    *,
-    retry: bool = True,
-) -> T | None:
-    """Run one driver call, and deal with a JS `alert()` that interrupts it.
-
-    By default Chrome dismisses the alert and the call raises `UnexpectedAlertPresentException`.
-    This reports the alert's text to `on_alert`, dismisses it if it is somehow still open, and
-    then repeats the call. Pass `retry=False` for calls that must not run twice, such as a click:
-    they return None after an alert.
-    """
-    for _ in range(5):
-        try:
-            return action()
-        except UnexpectedAlertPresentException as alert:
-            on_alert(str(alert.alert_text or alert.msg or "")[:300])
-            try:
-                driver.switch_to.alert.dismiss()
-            except NoAlertPresentException:
-                pass  # Chrome already dismissed it
-            if not retry:
-                return None
-    return action()
 
 
 @contextmanager

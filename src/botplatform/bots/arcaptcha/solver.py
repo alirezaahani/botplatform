@@ -56,8 +56,8 @@ class SliderSolver:
     mover_name: str
 
     def resolve(self, session: Session) -> BotResult | None:
-        timeouts = session.timeouts
-        session.ctx.event(
+        ctx, timeouts = session.ctx, session.timeouts
+        ctx.event(
             "solve_started",
             {
                 "finder": self.finder_name,
@@ -67,29 +67,25 @@ class SliderSolver:
                 "puzzle_ready": timeouts.puzzle_ready,
             },
         )
-        try:
-            return self._solve(session)
-        except StepTimeout as timeout:
-            session.ctx.event("solve_finished", {"reason": timeout.step})
-            raise
-
-    def _solve(self, session: Session) -> BotResult | None:
-        ctx = session.ctx
         attempts = 0
-        while attempts < session.timeouts.solve_attempts:
-            do(session, lambda: drain(session))
-            if types(session.creates)[-1:] != ["puzzle"]:
-                ctx.event("solve_finished", {"reason": "not_a_puzzle", "attempts": attempts})
-                return classify(session)
-            attempts += 1
-            result, accepted = self._attempt(session, attempts)
-            if result is not None:
-                ctx.event("solve_finished", {"reason": "gap_not_found", "attempts": attempts})
-                return result
-            if accepted:
-                session.solved = True
-                ctx.event("solve_finished", {"reason": "solved", "attempts": attempts})
-                return None
+        try:
+            while attempts < timeouts.solve_attempts:
+                do(session, lambda: drain(session))
+                if types(session.creates)[-1:] != ["puzzle"]:
+                    ctx.event("solve_finished", {"reason": "not_a_puzzle", "attempts": attempts})
+                    return classify(session)
+                attempts += 1
+                result, accepted = self._attempt(session, attempts)
+                if result is not None:
+                    ctx.event("solve_finished", {"reason": "gap_not_found", "attempts": attempts})
+                    return result
+                if accepted:
+                    session.solved = True
+                    ctx.event("solve_finished", {"reason": "solved", "attempts": attempts})
+                    return None
+        except StepTimeout as timeout:
+            ctx.event("solve_finished", {"reason": timeout.step})
+            raise
         ctx.event("solve_finished", {"reason": "solve_failed", "attempts": attempts})
         return BotResult(Status.BLOCKED, "solve_failed")
 

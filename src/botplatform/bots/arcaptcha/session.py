@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from selenium import webdriver
+from selenium.common.exceptions import NoAlertPresentException, UnexpectedAlertPresentException
 
 from botplatform.bots.arcaptcha.timeouts import (
     DEFAULT_TIMEOUTS,
@@ -14,11 +15,7 @@ from botplatform.bots.arcaptcha.timeouts import (
     StepTimeout,
     StepTimeouts,
 )
-from botplatform.bots.selenium_support import (
-    ResponseWatcher,
-    call_handling_alerts,
-    describe,
-)
+from botplatform.bots.selenium_support import ResponseWatcher, describe
 from botplatform.contract import RunContext
 from botplatform.profiles import BASELINE, Profile
 
@@ -75,12 +72,26 @@ class Session:
 
 
 def do(session: Session, action: Callable[[], Any], *, retry: bool = True) -> Any:
-    """Run any driver call. A JS `alert()` is recorded and dismissed instead of crashing it."""
+    """Run any driver call, and deal with a JS `alert()` that interrupts it.
 
-    def on_alert(text: str) -> None:
-        session.ctx.event("alert", {"text": text})
-
-    return call_handling_alerts(session.driver, action, on_alert, retry=retry)
+    By default Chrome dismisses the alert and the call raises `UnexpectedAlertPresentException`.
+    This records the alert's text as an event, dismisses it if it is somehow still open, and
+    then repeats the call. Pass `retry=False` for calls that must not run twice, such as a click:
+    they return None after an alert.
+    """
+    for _ in range(5):
+        try:
+            return action()
+        except UnexpectedAlertPresentException as alert:
+            text = str(alert.alert_text or alert.msg or "")[:300]
+            session.ctx.event("alert", {"text": text})
+            try:
+                session.driver.switch_to.alert.dismiss()
+            except NoAlertPresentException:
+                pass  # Chrome already dismissed it
+            if not retry:
+                return None
+    return action()
 
 
 def wait_for(session: Session, check: Callable[[], Any], seconds: float, step: str) -> Any:
