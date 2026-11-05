@@ -21,6 +21,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("modes", postgresql.JSONB(), nullable=False),
+        sa.Column("watchable_modes", postgresql.JSONB(), server_default="[]", nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
         sa.Column("position", sa.Integer(), server_default="0", nullable=False),
         sa.Column(

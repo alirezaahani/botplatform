@@ -36,6 +36,8 @@ class BotRecord(Base):
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     modes: Mapped[list[str]] = mapped_column(JSONB)
+    # The modes whose runs can be watched live. Each bot decides; the core names no mode.
+    watchable_modes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Index in the `BOTS` list, which is append-only, so a higher number is a newer bot.
     # `updated_at` cannot say this: every publish rewrites it.
