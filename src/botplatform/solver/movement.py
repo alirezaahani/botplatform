@@ -13,7 +13,7 @@ from typing import Any
 
 from selenium.webdriver.common.action_chains import ActionChains
 
-from botplatform.bots import drag_probe
+from botplatform.bots.arcaptcha.js import HANDLE, PIECE
 
 Path = list[tuple[int, int, float]]
 
@@ -102,9 +102,7 @@ def perform_drag(
             device.clear_actions()
 
     def lefts() -> dict[str, Any]:
-        return (
-            do(lambda: driver.execute_script(LEFTS_JS, drag_probe.HANDLE, drag_probe.PIECE)) or {}
-        )
+        return do(lambda: driver.execute_script(LEFTS_JS, HANDLE, PIECE)) or {}
 
     x = y = 0
     actions.move_to_element(handle).click_and_hold()
