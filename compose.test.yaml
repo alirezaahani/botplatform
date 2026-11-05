@@ -22,6 +22,8 @@ services:
       target: test
     init: true
     shm_size: 1gb
+    # Chrome tests in parallel; the database tests share one database, so they run after, alone.
+    command: sh -c "pytest -n 4 -m browser && pytest -m 'not browser'"
     environment:
       DATABASE_URL: postgresql+psycopg://test:test@db:5432/test
     depends_on:
