@@ -10,10 +10,10 @@ browser --> web --> Postgres <-- worker(s)
 ## Requirements
 
 - Docker Engine with the Compose plugin, on Linux with an amd64 CPU. This is what was tested: development on an Ubuntu-like Linux host, and CI on GitHub's `ubuntu-latest` runner.
-- Docker Desktop on macOS or Windows with an amd64 CPU is untested. It may work, but nothing in this repo checks it.
+- Docker Desktop on macOS or Windows with an amd64 CPU is untested.
 - ARM64 is a limitation: it is not supported and has not been tried.
 - Internet access. The image build downloads Chrome for Testing, and the `arcaptcha` bot reaches the ARCaptcha demo site at run time.
-- Each worker container asks for 1 GB of shared memory (`shm_size` in `compose.yaml`) for Chrome. Other disk and RAM needs were not measured.
+- Each worker container asks for 1 GB of shared memory (`shm_size` in `compose.yaml`) for Chrome.
 
 ## Quick start
 
@@ -44,7 +44,7 @@ The three `POSTGRES_*`, `ARCAPTCHA_USERNAME` and `ARCAPTCHA_PASSWORD` must be se
 
 - `/bots`: the registered bots and their modes, with a launch button for each. The newest bot is first. The list has the baseline `arcaptcha`, one `arcaptcha-<profile>` bot per browser profile, the four `arcaptcha-solver-*` bots, and the `example` bot.
 - `/stats`: one row per bot and mode with the number of finished runs, how many ended in each status, and the success rate with a 95% Wilson interval. Only finished runs count. Runs where someone opened the live viewer may have been helped by a person, so they are left out of the counts and the rate and shown only in the Watched column. Success means the status `success`, which for the ARCaptcha bots is a verified login.
-- `/runs`: the run history, newest first, with the queued, started and ended times (UTC) and the duration. Started, ended and duration are blank while a run has not started or finished.
+- `/runs`: the run history, newest first, with the queued, started and ended times (UTC) and the duration.
 - `/runs/{id}`: status, reason, `challenge_id`, the timeline and screenshots. The page refreshes while the run is active.
 - The `example` bot (mode `direct`) uses no browser, adds one timeline event and succeeds. It checks the platform itself.
 - The `arcaptcha` bot opens the ARCaptcha demo login page, records the `challenge_id` from the `create` response, then logs in with the demo credentials and checks the result. Modes: `headless` (no window) or `headful` (visible in the live view).
@@ -62,13 +62,13 @@ The three `POSTGRES_*`, `ARCAPTCHA_USERNAME` and `ARCAPTCHA_PASSWORD` must be se
 
 A bot adds a short reason code to each status. See [DECISIONS.md, 3a](DECISIONS.md) for the full table.
 
-A `blocked` run counts as a failed run, even when its `challenge_id` was recorded, because the scenario also includes logging in and checking the result. The run stays in the history with its `challenge_id`. This is our own reading of the task and has **not** been confirmed with ARCaptcha.
+A `blocked` run counts as a failed run, even when its `challenge_id` was recorded, because the scenario also includes logging in and checking the result. The run stays in the history with its `challenge_id`.
 
 ### Watching a run live
 
-Launch an ARCaptcha run in `headful` mode. While it is queued or running, its page shows a "Watch live" link that opens the worker's browser in noVNC. You can use the mouse and keyboard. This was checked by hand in a real browser: the mouse and keyboard work.
+Launch an ARCaptcha run in `headful` mode. While it is queued or running, its page shows a "Watch live" link that opens the worker's browser in noVNC. You can use the mouse and keyboard.
 
-The browser runs inside the worker container, on a virtual display. It is not a window on your desktop. The web container proxies the view, so you only need the web port.
+The browser runs inside the worker container, on a virtual display. It is not a window on your desktop.
 
 If anyone opens the live view, the run page warns that the result may be human-assisted.
 
@@ -79,8 +79,6 @@ If anyone opens the live view, the run page warns that the result may be human-a
 ```
 ssh -L 8000:127.0.0.1:8000 user@server
 ```
-
-To check that the worker image brings up the display and viewer, run `tests/core/check_viewer.sh`.
 
 ## Reducing CAPTCHA blocking (bonus)
 
@@ -99,7 +97,6 @@ Limits, stated plainly:
 
 - One IP, one day and small counts. The repeat batches were run in blocks and not interleaved with other profiles. Results depend on the IP and the day, and may differ for you.
 - These profile bots do not solve the slider. A run of one of them that gets a puzzle still ends `blocked` with reason `challenge_unsolved`, never `success`. The profiles reduce blocking; the solver bots (below) are what solve the puzzle.
-- A `blocked` or unsolved run is a failed run in the history. The success counts for the solver bots are in the next sections; none is claimed for the profile bots.
 
 ### Reproducing the measurement
 
@@ -121,8 +118,6 @@ The worker must be running. The batch queues the runs one at a time through the 
 | `--pause` | 10 | Seconds between runs. |
 
 The runs of all bots and modes are shuffled together.
-
-Then open `/stats`: every batch run is a normal run, so it is counted there with the rest of the history.
 
 ## Solving the slider (the solver bots)
 
@@ -154,7 +149,6 @@ Limits, stated plainly:
 
 - 80 of 80 does not mean a 100% success rate: with no failures it only says the failure rate is probably below about 4% over all runs (about 7% per mode). It also does not separate the four bots; neither the finder nor the movement shape changed whether the site accepted the answer.
 - One IP and one evening for both modes. Another network or time of day may differ, and a site that scores movement could change without notice.
-- The 80-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` or `mode=headless` and waits for each run. It can now be repeated with the batch runner above, which has not been done.
 - The solver needs OpenCV, which is installed in the worker image only (the `solver` extra in `pyproject.toml`).
 
 To run one: pick a `arcaptcha-solver-*` bot on `/bots` and press launch. Open the run page to see the timeline: `solve_attempt` holds the finder's answer, the drag and where the handle ended (how to read it: [evidence/solver/README.md](evidence/solver/README.md)). Design reasons: [DECISIONS.md](DECISIONS.md), the solver sections of step 8.
@@ -196,12 +190,11 @@ Real output of the test command:
 ```
 64 passed in 45.94s      (Chrome tests, 4 workers)
 157 passed, 65 deselected in 16.41s    (everything else)
-(the live test is never run by this command)
 ```
 
 ### What the tests cover
 
-The tests mirror the code. `tests/core/` covers the platform (queue, worker, viewer, stats, migrations). `tests/bots/utils/` covers the Selenium helpers against a plain local page and imports nothing from ARCaptcha. `tests/bots/arcaptcha/` covers the ARCaptcha bots against the fake demo page in `tests/bots/arcaptcha/fake_demo/`; the full-run cases are in `test_run.py`; the decisions behind them (which `create` answers block, which login responses count) are in `test_checkbox.py` and `test_login.py` and need no Chrome. `tests/bots/test_registry.py` holds the registry snapshot and its wiring. The bonus and stats work add rows at the end of the table. Each row lists the status and reason that the test asserts.
+The tests mirror the code. `tests/core/` covers the platform (queue, worker, viewer, stats, migrations). `tests/bots/utils/` covers the Selenium helpers against a plain local page and imports nothing from ARCaptcha. `tests/bots/arcaptcha/` covers the ARCaptcha bots against the fake demo page in `tests/bots/arcaptcha/fake_demo/`; the full-run cases are in `test_run.py`; the decisions behind them (which `create` answers block, which login responses count) are in `test_checkbox.py` and `test_login.py` and need no Chrome. `tests/bots/test_registry.py` holds the registry snapshot and its wiring. Each row lists the status and reason that the test asserts.
 
 | Case | Test | Result |
 |---|---|---|
@@ -285,7 +278,7 @@ class TitleBot(SeleniumBot):
 
 The bot `id` must be unique: a repeated id silently replaces the earlier bot in the dict, and the registry snapshot test (`tests/bots/test_registry.py`) is what catches it, so add the new bot to that snapshot too. The worker publishes the list at startup, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
 
-You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx, mode) -> BotResult`, and the core never imports Selenium. The optional Selenium helpers live in `src/botplatform/bots/utils/`: `browser.py` (the `chrome()` launcher, `SeleniumBot`, `wait_for`, the alert-aware `do`, `screenshot`), `profiles.py` (browser profiles), `network.py` (`ResponseWatcher`), `drag.py` (drag paths and `perform_drag`) and `page_scripts.py` (browser signals and in-page fetches). A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`. Nothing in this repo has a Playwright bot, and Playwright is not a dependency. Its browser would also have to be installed in the worker image.
+You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx, mode) -> BotResult`, and the core never imports Selenium. The optional Selenium helpers live in `src/botplatform/bots/utils/`: `browser.py` (the `chrome()` launcher, `SeleniumBot`, `wait_for`, the alert-aware `do`, `screenshot`), `profiles.py` (browser profiles), `network.py` (`ResponseWatcher`), `drag.py` (drag paths and `perform_drag`) and `page_scripts.py` (browser signals and in-page fetches). A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`.
 
 ## Data persistence
 
