@@ -1,6 +1,6 @@
 """Capturing the puzzle's images and geometry."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session
 from botplatform.bots.utils.browser import describe, wait_for
@@ -43,35 +43,25 @@ return {
 """
 
 
-class Rect(BaseModel):
-    x: float
-    y: float
-    width: float
-    height: float
-
-
+# Only the fields we read are required. The rest of the script's result is kept (`extra="allow"`)
+# so the `puzzle_captured` event still records it.
 class Image(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     src: str
-    natural_width: int
-    natural_height: int
-    rect: Rect
 
 
 class Piece(Image):
-    style_left: str
     style_top: str
-    computed_left: str
-    computed_top: str
 
 
 class PuzzleInfo(BaseModel):
     """What `PUZZLE_INFO_JS` returns once a puzzle is on screen."""
 
+    model_config = ConfigDict(extra="allow")
+
     background: Image
     piece: Piece
-    wrapper_rect: Rect | None
-    piece_parent_rect: Rect | None
-    device_pixel_ratio: float
 
 
 def capture_puzzle(
