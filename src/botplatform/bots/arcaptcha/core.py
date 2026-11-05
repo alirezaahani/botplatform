@@ -8,9 +8,8 @@ for each other browser profile, and the solver bots.
 import os
 
 from botplatform.bots.arcaptcha.flow import run_flow
-from botplatform.bots.arcaptcha.session import DEMO_URL, Session
+from botplatform.bots.arcaptcha.session import DEFAULT_TIMEOUTS, DEMO_URL, Session, StepTimeouts
 from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec, solver_spec
-from botplatform.bots.arcaptcha.timeouts import DEFAULT_TIMEOUTS, StepTimeouts
 from botplatform.bots.utils.browser import BrowserSession, SeleniumBot
 from botplatform.bots.utils.profiles import BASELINE, PROFILES, Profile
 from botplatform.contract import BotResult, RunContext, Status
