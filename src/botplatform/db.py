@@ -6,12 +6,10 @@ from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
-    Identity,
     Index,
     Integer,
     LargeBinary,
@@ -78,9 +76,9 @@ class RunEvent(Base):
     """An append-only timeline entry for a run."""
 
     __tablename__ = "run_events"
-    __table_args__ = (Index("run_events_run_id", "run_id", "id"),)
+    __table_args__ = (Index("run_events_run_id", "run_id", "at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     type: Mapped[str] = mapped_column(String(100))

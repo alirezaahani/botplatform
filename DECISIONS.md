@@ -216,6 +216,10 @@ Every step, every `challenge_id` and the decoded login request and response go i
 - **Only the PDF's columns:** earlier IDs and the login response would be lost.
 - **Deriving the latest ID through a view:** there would be one copy, but `runs` would have no `challenge_id` column, and every read would depend on the view.
 
+**Event IDs are UUIDs, ordered by `at`:** `run_events` was the only table with an integer key, and that integer also gave the timeline its order. It now has a UUID `id` like `runs` and `run_artifacts`, and the timeline orders by `at`, as artifacts order by `created_at`. UUIDv7 would keep the order in the ID, but it needs Python 3.13 and Postgres 18.
+
+**Trade-off:** a clock that steps backwards during a run could misorder its events, and events written in one transaction share an `at`, so their order among themselves is not defined. Migration 0004 discards the old integer IDs. Downgrading numbers the events 1..n in `at` order.
+
 ### 4c. Screenshots: in Postgres, in `run_artifacts`
 
 **Why:** the database stays the only data link between web and worker, and one volume holds all the data. A large number of runs would eventually need cleanup, which this scale does not need yet.

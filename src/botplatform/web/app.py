@@ -100,7 +100,7 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
     if run is None:
         raise HTTPException(404, "No such run")
     events = session.scalars(
-        select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.id)
+        select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.at)
     ).all()
     artifacts = session.execute(
         select(RunArtifact.id, RunArtifact.name, RunArtifact.content_type)
