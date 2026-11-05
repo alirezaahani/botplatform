@@ -14,9 +14,9 @@ from sqlalchemy.orm import sessionmaker
 
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
+from botplatform.bots.utils.profiles import Profile
 from botplatform.contract import Bot, BotResult, Status
 from botplatform.db import Base, BotRecord, Run, SessionLocal, engine
-from botplatform.bots.utils.profiles import Profile
 from tests.fake_demo.server import FakeDemo
 
 USERNAME = "tester@example.com"

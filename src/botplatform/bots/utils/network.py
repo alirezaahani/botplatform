@@ -1,62 +1,15 @@
-"""An optional helper for bots that use Selenium. The platform core never imports it."""
+"""Reading network responses through Chrome's DevTools events. The platform core never imports it."""
 
 import base64
 import json
-import os
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
+from typing import Any
 
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.service import Service
 
-from botplatform.bots.utils.profiles import BASELINE, Profile
-
-
-def describe(error: Exception, limit: int = 200) -> str:
-    """`<TypeName>: <first line of the message, cut to limit>`; just the type name if no message."""
-    lines = str(error).removeprefix("Message: ").splitlines()  # Selenium adds that prefix
-    first = lines[0][:limit] if lines else ""
-    name = type(error).__name__
-    return f"{name}: {first}" if first else name
-
-
-@contextmanager
-def chrome(*, headless: bool, profile: Profile = BASELINE) -> Iterator[webdriver.Chrome]:
-    """Start the pinned Chrome for Testing, and always quit it.
-
-    The worker image sets `CHROME_BINARY` and `CHROMEDRIVER_BINARY`. Passing the driver path
-    explicitly means Selenium Manager never looks for, or downloads, a browser or driver.
-    The `profile` adds its own arguments, dropped switches and start-up script on top.
-    """
-    options = webdriver.ChromeOptions()
-    options.binary_location = os.environ["CHROME_BINARY"]
-    # Lets `ResponseWatcher` read network events through the DevTools protocol.
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-    if headless:
-        options.add_argument("--headless=new")
-    else:
-        # Fill the worker's 1280x800 virtual display, which has no window manager.
-        options.add_argument("--window-size=1280,800")
-        options.add_argument("--window-position=0,0")
-    # Docker's default seccomp profile blocks Chrome's sandbox. See DECISIONS.md 1a.
-    options.add_argument("--no-sandbox")
-    for argument in profile.args:
-        options.add_argument(argument)
-    if profile.excluded_switches:
-        options.add_experimental_option("excludeSwitches", list(profile.excluded_switches))
-    driver = webdriver.Chrome(
-        options=options, service=Service(executable_path=os.environ["CHROMEDRIVER_BINARY"])
-    )
-    try:
-        if profile.init_script:
-            driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument", {"source": profile.init_script}
-            )
-        yield driver
-    finally:
-        driver.quit()
+from botplatform.bots.utils.browser import describe
 
 
 @dataclass(frozen=True)
@@ -75,25 +28,29 @@ class CapturedResponse:
 class ResponseWatcher:
     """Collects finished responses for chosen URLs, from Chrome's DevTools network events.
 
-    Call `poll()` regularly. Responses come back in the order they finished. Only POST
-    requests count: a cross-origin call also logs a CORS preflight for the same URL, which is
-    ignored because its method is `OPTIONS` (Chrome 156 gives it the type `Other`). Request
-    bodies are read too, so a login request's password is captured.
+    Call `poll()` regularly. Responses come back in the order they finished. Only requests
+    whose method is in `methods` count (POST by default): a cross-origin call also logs a CORS
+    preflight for the same URL, which is ignored because its method is `OPTIONS` (Chrome 156
+    gives it the type `Other`). Request bodies are read too, so a login request's password is
+    captured.
     """
 
     def __init__(
         self,
         driver: webdriver.Chrome,
         matchers: dict[str, Callable[[str], bool]],
+        *,
+        methods: Collection[str] = ("POST",),
     ):
         self._driver = driver
         self._matchers = matchers
+        self._methods = methods
         self._request_bodies: dict[str, bytes] = {}  # request id -> body
         self._pending: dict[str, tuple[str, str, int]] = {}  # request id -> name, url, status
-        self._tracked: dict[str, str] = {}  # request id -> name, for real POST requests
+        self._tracked: dict[str, str] = {}  # request id -> name, for counted requests
         # Matching requests that were not counted, such as CORS preflights, for the run's record.
         self.ignored: list[dict[str, str | None]] = []
-        self.started: list[str] = []  # names of real POST requests, in the order they started
+        self.started: list[str] = []  # names of counted requests, in the order they started
         self.failed: list[str] = []  # names of tracked requests that failed before a response
 
     def poll(self) -> list[CapturedResponse]:
@@ -125,7 +82,7 @@ class ResponseWatcher:
         name = next((n for n, matches in self._matchers.items() if matches(request["url"])), None)
         if name is None:
             return
-        if request["method"] == "POST":
+        if request["method"] in self._methods:
             self._tracked[request_id] = name
             self.started.append(name)
             body = self._inline_request_body(request)
@@ -171,3 +128,33 @@ class ResponseWatcher:
         body = result["body"]
         data = base64.b64decode(body) if result.get("base64Encoded") else body.encode("utf-8")
         return CapturedResponse(name, url, status, data, None, request_body, request_error)
+
+
+def path_endswith(suffix: str) -> Callable[[str], bool]:
+    """A matcher for URLs whose path (the query string is ignored) ends with `suffix`."""
+    return lambda url: url.split("?")[0].endswith(suffix)
+
+
+def exchange_record(
+    response: CapturedResponse, decode: Callable[[bytes], Any] = json.loads
+) -> dict[str, Any]:
+    """A decoded request and response, for the run's record.
+
+    Each side that has no body, or fails to decode, is None with a `<side>_note` that says why.
+    """
+    record: dict[str, Any] = {"http_status": response.status}
+    for side, data, error in (
+        ("request", response.request_body, response.request_body_error),
+        ("response", response.body, response.body_error),
+    ):
+        if data is None:
+            record[side] = None
+            record[f"{side}_note"] = f"no body: {error}"
+            continue
+        try:
+            record[side] = decode(data)
+        except Exception as failure:  # noqa: BLE001 - a failed decode must not crash a run
+            record[side] = None
+            record[f"{side}_note"] = f"decode failed: {describe(failure)}"
+            record[f"{side}_text"] = data.decode("utf-8", errors="replace")[:500]
+    return record

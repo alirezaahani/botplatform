@@ -6,11 +6,10 @@ from typing import Any
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha.js import BROWSER_SIGNALS_JS
-from botplatform.bots.arcaptcha.session import Session, do, screenshot, wait_for
-from botplatform.bots.arcaptcha.timeouts import POLL_SECONDS, StepTimeout
+from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.arcaptcha.traffic import classify, drain
-from botplatform.bots.selenium_support import describe
+from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, do, screenshot, wait_for
+from botplatform.bots.utils.page_scripts import record_browser_signals
 from botplatform.contract import BotResult, Status
 
 CHECKBOX = "#input-checkbox"
@@ -136,11 +135,3 @@ def read_toast(session: Session) -> dict[str, str] | None:
     text = toast.text.strip()
     # The toast animates in, so its text can be empty for a moment. Wait for the message.
     return {"kind": kind, "text": text[:300]} if text else None
-
-
-def record_browser_signals(session: Session) -> None:
-    try:
-        signals = do(session, lambda: session.driver.execute_async_script(BROWSER_SIGNALS_JS))
-    except Exception as error:  # noqa: BLE001 - evidence gathering must not change the result
-        signals = {"error": describe(error)}
-    session.ctx.event("browser_signals", signals if isinstance(signals, dict) else {})

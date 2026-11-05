@@ -1,17 +1,26 @@
 """Capturing the puzzle's images and finding its handle."""
 
-import base64
-import mimetypes
 import time
 from typing import Any
 
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, PUZZLE_INFO_JS
-from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session, do, wait_for
-from botplatform.bots.arcaptcha.timeouts import StepTimeout
-from botplatform.bots.selenium_support import describe
-from botplatform.solver.movement import HANDLE
+from botplatform.bots.arcaptcha.js import PUZZLE_INFO_JS
+from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session
+from botplatform.bots.utils.browser import StepTimeout, describe, wait_for
+from botplatform.bots.utils.page_scripts import fetch_in_page, save_fetched
+
+# The widget being dragged: the slider's handle and the puzzle piece it moves.
+HANDLE = "div.draggable"
+PIECE = "img.puzzle"
+# The handle's and piece's `left` right now, in px (None when missing).
+LEFTS_JS = """
+const left = (selector) => {
+  const el = document.querySelector(selector);
+  return el ? parseFloat(getComputedStyle(el).left) : null;
+};
+return {handle: left(arguments[0]), piece: left(arguments[1])};
+"""
 
 
 def capture_puzzle(
@@ -39,23 +48,13 @@ def capture_puzzle(
         )
         srcs = [info["background"]["src"], info["piece"]["src"]]
         session.puzzle_srcs.extend(srcs)
-        fetched = do(session, lambda: driver.execute_async_script(FETCH_IMAGES_JS, *srcs))
-        if not isinstance(fetched, dict) or "error" in fetched:
-            raise RuntimeError((fetched or {}).get("error", "no result"))
-        saved = {}
-        raw: dict[str, bytes] = {}
-        for part in ("background", "piece"):
-            data = base64.b64decode(fetched[part]["b64"])
-            raw[part] = data
-            content_type = (fetched[part]["content_type"] or "").split(";")[0].strip()
-            extension = mimetypes.guess_extension(content_type)
-            if not extension:  # no header, or a type Python does not know
-                content_type, extension = "application/octet-stream", ".bin"
-            name = f"puzzle-{n}-{part}{extension}"
-            ctx.artifact(name, content_type, data)
-            saved[part] = name
+        background, piece = fetch_in_page(session, srcs)
+        saved = {
+            part: save_fetched(ctx, f"puzzle-{n}-{part}", file)
+            for part, file in (("background", background), ("piece", piece))
+        }
         session.capture = CapturedPuzzle(
-            n, challenge_id, raw["background"], raw["piece"], pixels(info["piece"])
+            n, challenge_id, background.data, piece.data, pixels(info["piece"])
         )
         ctx.event(
             "puzzle_captured", {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info}

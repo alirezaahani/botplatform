@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from botplatform.solver.movement import MOVERS, duration, eased_path, linear_path
+from botplatform.bots.utils.drag import MOVERS, duration, eased_path, linear_path
 
 DXS = [0, 1, 7, 90, 130, 196]
 

@@ -39,7 +39,7 @@ BASELINE_SPEC = BotSpec(
 def solver_spec(finder: str, mover: str) -> BotSpec:
     """An automatic solver bot, `arcaptcha-solver-<finder>-<mover>`.
 
-    The finder and mover names are keys of `gap.FINDERS` and `movement.MOVERS`.
+    The finder and mover names are keys of `gap_finders.FINDERS` and `drag.MOVERS`.
     """
     return BotSpec(
         id=f"arcaptcha-solver-{finder}-{mover}",

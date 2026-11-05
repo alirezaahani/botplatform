@@ -2,8 +2,7 @@
 
 from selenium.common.exceptions import WebDriverException
 
-from botplatform.bots.arcaptcha.timeouts import StepTimeout
-from botplatform.bots.selenium_support import describe
+from botplatform.bots.utils.browser import StepTimeout, describe
 
 
 def test_a_selenium_error_is_described_by_its_type_and_first_line():

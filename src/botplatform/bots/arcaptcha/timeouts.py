@@ -1,4 +1,4 @@
-"""Step time limits and the error for running out of one."""
+"""Step time limits."""
 
 from dataclasses import dataclass
 
@@ -27,14 +27,4 @@ class StepTimeouts:
     stuck_retries: int = 2
 
 
-POLL_SECONDS = 0.25
-
 DEFAULT_TIMEOUTS = StepTimeouts()
-
-
-class StepTimeout(Exception):
-    """A step ran out of time. `step` becomes the run's reason."""
-
-    def __init__(self, step: str) -> None:
-        super().__init__(step)
-        self.step = step

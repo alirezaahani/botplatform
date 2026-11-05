@@ -5,10 +5,16 @@ These measure Chrome, not our configuration: a profile counts only if the page s
 
 import pytest
 
-from botplatform.bots.arcaptcha import js
-from botplatform.bots.selenium_support import chrome
+from botplatform.bots.utils import page_scripts
+from botplatform.bots.utils.browser import chrome
+from botplatform.bots.utils.profiles import (
+    BASELINE,
+    HEADFUL_USER_AGENT,
+    PROFILES,
+    STEALTH_FLAGS,
+    Profile,
+)
 from botplatform.contract import Status
-from botplatform.bots.utils.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
 
 SIGNAL_KEYS = {
     "webdriver", "user_agent", "platform", "languages", "plugins", "mime_types",
@@ -28,7 +34,7 @@ CDC_JS = "return Object.getOwnPropertyNames(window).filter(n => /cdc_/.test(n)).
 def page_signals(profile: Profile, fake, headless: bool = True) -> dict:
     with chrome(headless=headless, profile=profile) as driver:
         driver.get(fake.url)
-        return driver.execute_async_script(js.BROWSER_SIGNALS_JS)
+        return driver.execute_async_script(page_scripts.BROWSER_SIGNALS_JS)
 
 
 def page_view(profile: Profile, fake, headless: bool) -> dict:

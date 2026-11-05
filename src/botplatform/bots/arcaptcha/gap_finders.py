@@ -11,7 +11,7 @@ from collections.abc import Callable
 import cv2
 import numpy as np
 
-from botplatform.solver.detect import body_left, find_piece_mask
+from botplatform.bots.arcaptcha.gap_halo_detector import body_left, find_piece_mask
 
 # The handle is 64 px wide on a 260 px track, so the valid answers are 0..196 (seen live).
 MIN_ANSWER = 0
@@ -46,7 +46,7 @@ def check_range(target: int) -> int:
 def find_gap_x_halo(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
     """The gap by image analysis of the background alone (the piece arguments are ignored).
 
-    Uses the detection in `detect.py` on the background decoded in memory: the gap body
+    Uses the detection in `gap_halo_detector.py` on the background decoded in memory: the gap body
     square's left x, minus 10.
     """
     image = _decode(background_png, cv2.IMREAD_COLOR, "the background")

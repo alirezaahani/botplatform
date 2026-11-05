@@ -4,15 +4,12 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from selenium.webdriver.common.action_chains import ActionChains
-
-from botplatform.bots.arcaptcha import puzzle
-from botplatform.bots.arcaptcha.session import Session, do
-from botplatform.bots.arcaptcha.timeouts import POLL_SECONDS, StepTimeout
+from botplatform.bots.arcaptcha import gap_finders, puzzle
+from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.arcaptcha.traffic import classify, drain, types
-from botplatform.bots.selenium_support import describe
+from botplatform.bots.utils import drag
+from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, describe, do
 from botplatform.contract import BotResult, Status
-from botplatform.solver import gap, movement
 
 
 @dataclass(kw_only=True)
@@ -49,7 +46,7 @@ class SliderSolver:
 
     The answer's body never decides the outcome beyond this: an answer followed by no new puzzle
     within `answer_settle` is taken as accepted, and the login is the judge. `resolve` returns
-    None for that, so the login runs. The names are keys of `gap.FINDERS` and `movement.MOVERS`.
+    None for that, so the login runs. The names are keys of `gap_finders.FINDERS` and `drag.MOVERS`.
     """
 
     finder_name: str
@@ -100,10 +97,10 @@ class SliderSolver:
             mover=self.mover_name,
         )
         try:
-            target = gap.FINDERS[self.finder_name](
+            target = gap_finders.FINDERS[self.finder_name](
                 current.background, current.piece, current.piece_top or 0
             )
-        except gap.GapNotFound as error:
+        except gap_finders.GapNotFound as error:
             attempt.outcome = "gap_not_found"
             attempt.message = str(error)[:200]
             session.ctx.event("solve_attempt", attempt.as_event())
@@ -117,38 +114,38 @@ class SliderSolver:
 
     def _drag_with_retries(self, session: Session, attempt: Attempt, target: int) -> None:
         """Drag the handle to `target`, again if it did not move. A failed drag is recorded."""
-        drag = None
+        result = None
+
+        def snapshot() -> dict[str, Any]:
+            lefts = do(
+                session,
+                lambda: session.driver.execute_script(puzzle.LEFTS_JS, puzzle.HANDLE, puzzle.PIECE),
+            )
+            return lefts or {}
+
         try:
             while True:
-                path = movement.MOVERS[self.mover_name](target, session.rng)
-                attempt.duration = round(movement.duration(path), 3)
+                path = drag.MOVERS[self.mover_name](target, session.rng)
+                attempt.duration = round(drag.duration(path), 3)
                 attempt.steps = len(path)
-                handle = puzzle.handle(session)
-                drag = movement.perform_drag(
-                    session.driver, handle, path, lambda action: do(session, action)
+                result = drag.perform_drag(
+                    session.driver,
+                    puzzle.handle(session),
+                    path,
+                    snapshot,
+                    lambda lefts: (lefts.get("handle") or 0) > 0,
+                    lambda action: do(session, action),
                 )
-                if drag.moved or attempt.stuck_retries >= session.timeouts.stuck_retries:
+                if result.moved or attempt.stuck_retries >= session.timeouts.stuck_retries:
                     break
                 attempt.stuck_retries += 1
-                release_everything(session)
+                drag.release_everything(session.driver)
         except Exception as error:  # noqa: BLE001 - one failed drag must not stop the run
             attempt.error = describe(error)
-            release_everything(session)
-        if drag is not None:
-            attempt.handle_left = drag.handle_left
-            attempt.piece_left = drag.piece_left
-
-
-def release_everything(session: Session) -> None:
-    """After a failed drag, let go of the mouse so the next attempt starts clean."""
-    try:
-        ActionChains(session.driver).reset_actions()
-        session.driver.execute_cdp_cmd(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseReleased", "x": 0, "y": 0, "button": "left", "clickCount": 1},
-        )
-    except Exception:  # noqa: BLE001, S110 - best effort only
-        pass
+            drag.release_everything(session.driver)
+        if result is not None:
+            attempt.handle_left = result.final.get("handle")
+            attempt.piece_left = result.final.get("piece")
 
 
 def await_next_puzzle(session: Session, n: int, answers_before: int) -> str:

@@ -5,7 +5,7 @@ from typing import Any
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.puzzle import capture_puzzle
 from botplatform.bots.arcaptcha.session import Session
-from botplatform.bots.selenium_support import CapturedResponse, describe
+from botplatform.bots.utils.network import CapturedResponse, exchange_record
 from botplatform.contract import BotResult, Status
 
 
@@ -17,11 +17,11 @@ def drain(session: Session) -> bool:
     seen_create = False
     for response in session.watcher.poll():
         if response.name == "login":
-            record = exchange_record(response)
+            record = exchange_record(response, decode_body)
             session.logins.append(record)
             session.ctx.event("login_request", record)
         elif response.name == "answer":
-            record = exchange_record(response)
+            record = exchange_record(response, decode_body)
             session.answer_records.append(record)
             session.ctx.event("answer_request", record)
         else:
@@ -36,7 +36,7 @@ def drain(session: Session) -> bool:
 
 
 def handle_create(session: Session, response: CapturedResponse) -> None:
-    record = exchange_record(response)
+    record = exchange_record(response, decode_body)
     decoded = record["response"]
     info: dict[str, Any] = {"http_status": response.status, "captcha_type": None}
     if response.body is None:
@@ -58,26 +58,6 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
     session.capture = None
     session.ctx.event("create_response", info)
     session.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
-
-
-def exchange_record(response: CapturedResponse) -> dict[str, Any]:
-    """A decoded request and response. The `create` request holds the browser signals sent."""
-    record: dict[str, Any] = {"http_status": response.status}
-    for side, data, error in (
-        ("request", response.request_body, response.request_body_error),
-        ("response", response.body, response.body_error),
-    ):
-        if data is None:
-            record[side] = None
-            record[f"{side}_note"] = f"no body: {error}"
-            continue
-        try:
-            record[side] = decode_body(data)
-        except Exception as failure:  # noqa: BLE001 - a failed decode must not crash a run
-            record[side] = None
-            record[f"{side}_note"] = f"decode failed: {describe(failure)}"
-            record[f"{side}_text"] = data.decode("utf-8", errors="replace")[:500]
-    return record
 
 
 def types(creates: list[dict[str, Any]]) -> list[str]:

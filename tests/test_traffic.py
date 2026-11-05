@@ -2,8 +2,8 @@
 
 import pytest
 
-from botplatform.bots.arcaptcha.traffic import exchange_record
-from botplatform.bots.selenium_support import CapturedResponse
+from botplatform.bots.arcaptcha.codec import decode_body
+from botplatform.bots.utils.network import CapturedResponse, exchange_record
 
 
 def response(body: bytes | None, error: str | None = None, **kwargs) -> CapturedResponse:
@@ -11,7 +11,9 @@ def response(body: bytes | None, error: str | None = None, **kwargs) -> Captured
 
 
 def test_a_readable_exchange_is_decoded_on_both_sides():
-    record = exchange_record(response(b'{"captcha_type": "accept"}', request_body=b'{"a": 1}'))
+    record = exchange_record(
+        response(b'{"captcha_type": "accept"}', request_body=b'{"a": 1}'), decode_body
+    )
 
     assert (record["request"], record["response"]) == ({"a": 1}, {"captcha_type": "accept"})
     assert not [key for key in record if key.endswith("_note")]
@@ -31,7 +33,7 @@ def test_a_readable_exchange_is_decoded_on_both_sides():
     ids=["no-response-body", "undecodable-response", "undecodable-request"],
 )
 def test_a_body_that_cannot_be_read_is_noted_and_does_not_raise(captured, side, note_starts_with):
-    record = exchange_record(captured)
+    record = exchange_record(captured, decode_body)
 
     assert record[side] is None
     assert record[f"{side}_note"].startswith(note_starts_with)
@@ -39,7 +41,7 @@ def test_a_body_that_cannot_be_read_is_noted_and_does_not_raise(captured, side, 
 
 
 def test_an_undecodable_body_keeps_the_start_of_its_text():
-    record = exchange_record(response(b"<html>oops</html>" + b"x" * 900))
+    record = exchange_record(response(b"<html>oops</html>" + b"x" * 900), decode_body)
 
     assert record["response"] is None
     assert record["response_text"] == ("<html>oops</html>" + "x" * 900)[:500]

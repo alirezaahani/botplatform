@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import pytest
 
-from botplatform.solver.gap import FINDERS, GapNotFound, find_gap_x_silhouette
+from botplatform.bots.arcaptcha.gap_finders import FINDERS, GapNotFound, find_gap_x_silhouette
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 MANIFEST = json.loads((DIR / "manifest.json").read_text())

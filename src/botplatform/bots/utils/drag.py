@@ -1,4 +1,4 @@
-"""Moving the handle: pure path generators and one executor.
+"""Dragging a widget: pure path generators and one executor. The platform core never imports it.
 
 A path is a list of points `(x_offset, y_offset, pause_seconds)`: offsets from the handle's
 centre where the press happened, and the time to wait after reaching the point. The last point
@@ -59,39 +59,30 @@ MOVERS: dict[str, Callable[[int, random.Random], Path]] = {
     "eased": eased_path,
 }
 
-# The widget being dragged: the slider's handle and the puzzle piece it moves.
-HANDLE = "div.draggable"
-PIECE = "img.puzzle"
-# The handle's and piece's `left` right now, in px (None when missing).
-LEFTS_JS = """
-const left = (selector) => {
-  const el = document.querySelector(selector);
-  return el ? parseFloat(getComputedStyle(el).left) : null;
-};
-return {handle: left(arguments[0]), piece: left(arguments[1])};
-"""
-# After the first step the handle must have left 0, or the widget ignored the press.
+# After the first step that moves right, the widget must respond, or it ignored the press.
 MOVED_WAIT = 0.4
 
 
 @dataclass
 class DragResult:
-    moved: bool  # the handle left 0 after the first step
-    handle_left: float | None  # just before the release
-    piece_left: float | None
+    moved: bool  # the widget responded after the first step
+    final: dict[str, Any]  # the snapshot just before the release (after it, if it did not move)
 
 
 def perform_drag(
     driver: webdriver.Chrome,
     handle: WebElement,
     path: Path,
+    snapshot: Callable[[], dict[str, Any]],
+    moved: Callable[[dict[str, Any]], bool],
     do: Callable[[Callable[[], Any]], Any] = lambda f: f(),
 ) -> DragResult:
     """Press the handle's centre, follow `path`, release: one motion with the pointer held.
 
-    After the first step that moves right it reads the handle's position. If the handle did not
-    move it releases and returns `moved=False` without finishing the path. `do` wraps every
-    driver call (the scenario passes its alert-handling wrapper).
+    After the first step that moves right it calls `snapshot` (it reads the page state) until
+    `moved(snapshot)` says the widget responded, for up to `MOVED_WAIT`. If it did not respond it
+    releases and returns `moved=False` without finishing the path. `do` wraps every driver call
+    (a scenario can pass its alert-handling wrapper).
     """
     do(
         lambda: driver.execute_script(
@@ -107,9 +98,6 @@ def perform_drag(
         for device in actions.w3c_actions.devices:
             device.clear_actions()
 
-    def lefts() -> dict[str, Any]:
-        return do(lambda: driver.execute_script(LEFTS_JS, HANDLE, PIECE)) or {}
-
     x = y = 0
 
     def follow(points: Path) -> None:
@@ -124,22 +112,33 @@ def perform_drag(
     head = path[: first + 1] if first is not None else path
     follow(head)
     run()
-    moved = True
+    responded = True
     if first is not None:
         deadline = time.monotonic() + MOVED_WAIT
         while True:
-            moved = (lefts().get("handle") or 0) > 0
-            if moved or time.monotonic() >= deadline:
+            responded = moved(snapshot())
+            if responded or time.monotonic() >= deadline:
                 break
             time.sleep(0.05)
-    if not moved:
+    if not responded:
         actions.release()
         run()
-        stuck = lefts()
-        return DragResult(False, stuck.get("handle"), stuck.get("piece"))
+        return DragResult(False, snapshot())
     follow(path[len(head) :])
     run()
-    final = lefts()
+    final = snapshot()
     actions.release()
     run()
-    return DragResult(True, final.get("handle"), final.get("piece"))
+    return DragResult(True, final)
+
+
+def release_everything(driver: webdriver.Chrome) -> None:
+    """After a failed drag, let go of the mouse so the next attempt starts clean."""
+    try:
+        ActionChains(driver).reset_actions()
+        driver.execute_cdp_cmd(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseReleased", "x": 0, "y": 0, "button": "left", "clickCount": 1},
+        )
+    except Exception:  # noqa: BLE001, S110 - best effort only
+        pass

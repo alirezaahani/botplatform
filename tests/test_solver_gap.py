@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from botplatform.solver import gap
-from botplatform.solver.gap import FINDERS, GapNotFound, find_gap_x_halo
+from botplatform.bots.arcaptcha import gap_finders as gap
+from botplatform.bots.arcaptcha.gap_finders import FINDERS, GapNotFound, find_gap_x_halo
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 MANIFEST = json.loads((DIR / "manifest.json").read_text())
