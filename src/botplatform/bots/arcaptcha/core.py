@@ -25,6 +25,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha.codec import decode_body
+from botplatform.bots.arcaptcha.errors import describe
 from botplatform.bots.arcaptcha.images import sniff_image
 from botplatform.bots.arcaptcha.js import (
     BLANK_PASSWORD_JS,
@@ -397,7 +398,7 @@ class Scenario:
                     attempt["stuck_retries"] += 1
                     self._release_everything()
             except Exception as error:  # noqa: BLE001 - one failed drag must not stop the run
-                attempt["error"] = f"{type(error).__name__}: {str(error).splitlines()[0][:200]}"
+                attempt["error"] = describe(error)
                 self._release_everything()
             if drag is not None:
                 attempt["handle_left"] = drag.handle_left
@@ -643,7 +644,7 @@ class Scenario:
         try:
             signals = self._do(lambda: self.driver.execute_async_script(BROWSER_SIGNALS_JS))
         except Exception as error:  # noqa: BLE001 - evidence gathering must not change the result
-            signals = {"error": f"{type(error).__name__}: {str(error).splitlines()[0][:200]}"}
+            signals = {"error": describe(error)}
         self.ctx.event("browser_signals", signals if isinstance(signals, dict) else {})
 
     @staticmethod
