@@ -17,7 +17,7 @@
   {% if runs %}
   <table>
     <thead>
-      <tr><th>Run</th><th>Bot</th><th>Mode</th><th>Status</th><th>Reason</th><th>Challenge ID</th><th>Queued (UTC)</th></tr>
+      <tr><th>Run</th><th>Bot</th><th>Mode</th><th>Status</th><th>Reason</th><th>Challenge ID</th><th>Queued (UTC)</th><th>Started (UTC)</th><th>Ended (UTC)</th><th>Duration</th></tr>
     </thead>
     <tbody>
       {% for run in runs %}
@@ -29,6 +29,9 @@
         <td>{{ run.reason or "" }}</td>
         <td><code>{{ run.challenge_id or "" }}</code></td>
         <td>{{ run.queued_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ run.started_at.strftime("%Y-%m-%d %H:%M:%S") if run.started_at else "" }}</td>
+        <td>{{ run.ended_at.strftime("%Y-%m-%d %H:%M:%S") if run.ended_at else "" }}</td>
+        <td>{% if run.started_at and run.ended_at %}{{ (run.ended_at - run.started_at).total_seconds()|round|int }}s{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
