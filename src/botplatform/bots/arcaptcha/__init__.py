@@ -9,7 +9,6 @@ from botplatform.bots.arcaptcha.core import (
     BROWSER_SIGNALS_JS,
     CHALLENGE_TYPES,
     CHECKBOX,
-    DEFAULT_TIMEOUTS,
     DEMO_URL,
     FETCH_IMAGES_JS,
     LOGIN_BUTTON,
@@ -24,10 +23,9 @@ from botplatform.bots.arcaptcha.core import (
     ArcaptchaBot,
     CapturedPuzzle,
     Scenario,
-    StepTimeout,
-    StepTimeouts,
     profile_bot,
     solver_bot,
 )
 from botplatform.bots.arcaptcha.images import IMAGE_TYPES, sniff_image
 from botplatform.bots.arcaptcha.redaction import redact
+from botplatform.bots.arcaptcha.timeouts import DEFAULT_TIMEOUTS, StepTimeout, StepTimeouts
