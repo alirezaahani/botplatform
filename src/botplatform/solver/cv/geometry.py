@@ -1,5 +1,6 @@
-# Copied unchanged from the captcha-solve project (src/captcha_solve/geometry.py), so this
-# repository builds and runs the solver without a dependency on another repository.
+# Copied from the captcha-solve project (src/captcha_solve/geometry.py), so this repository builds
+# and runs the solver without a dependency on another repository. Only import order and
+# formatting were changed here.
 """Turn a missing-piece mask into usable geometry.
 
 A jigsaw piece is a square *body* with circular knobs poking out of some of
@@ -21,11 +22,12 @@ side.
 
 from __future__ import annotations
 
-import cv2
-import numpy as np
 from dataclasses import dataclass
 
-__all__ = ["Edge", "Tab", "PieceGeometry", "extract_geometry"]
+import cv2
+import numpy as np
+
+__all__ = ["Edge", "PieceGeometry", "Tab", "extract_geometry"]
 
 SIDES = ("top", "right", "bottom", "left")
 
@@ -232,9 +234,7 @@ def _measure_tab(
     return Tab(side, True, int(depth), start, end, center, tip)
 
 
-def extract_geometry(
-    mask: np.ndarray, *, tab_min_depth: int = TAB_MIN_DEPTH
-) -> PieceGeometry:
+def extract_geometry(mask: np.ndarray, *, tab_min_depth: int = TAB_MIN_DEPTH) -> PieceGeometry:
     """Derive body square, edges, knobs and centres from a piece mask."""
     mask = (mask > 0).astype(np.uint8)
     ys, xs = np.where(mask)
@@ -266,9 +266,7 @@ def extract_geometry(
     tabs: dict[str, Tab] = {}
     for side, (region, origin, depth) in regions.items():
         knob = _largest_component(region) if region.size else region
-        tabs[side] = _measure_tab(
-            side, knob, origin, depth, depth >= tab_min_depth
-        )
+        tabs[side] = _measure_tab(side, knob, origin, depth, depth >= tab_min_depth)
 
     corners = {
         "top_left": (body_left, body_top),
@@ -279,12 +277,8 @@ def extract_geometry(
 
     edges = {
         "top": Edge("top", corners["top_left"], corners["top_right"], tabs["top"]),
-        "right": Edge(
-            "right", corners["top_right"], corners["bottom_right"], tabs["right"]
-        ),
-        "bottom": Edge(
-            "bottom", corners["bottom_left"], corners["bottom_right"], tabs["bottom"]
-        ),
+        "right": Edge("right", corners["top_right"], corners["bottom_right"], tabs["right"]),
+        "bottom": Edge("bottom", corners["bottom_left"], corners["bottom_right"], tabs["bottom"]),
         "left": Edge("left", corners["top_left"], corners["bottom_left"], tabs["left"]),
     }
 

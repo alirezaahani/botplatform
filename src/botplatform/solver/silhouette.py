@@ -51,5 +51,7 @@ def find_gap_x_silhouette(background_png: bytes, piece_png: bytes, piece_top: in
     rivals = np.abs(np.arange(len(scores)) - best) >= NEAR_PEAK
     runner_up = scores[rivals].max() if rivals.any() else -np.inf
     if scores[best] < MIN_SCORE or scores[best] - runner_up < MIN_MARGIN:
-        raise GapNotFound(f"no clear silhouette match (best {scores[best]:.1f}, rival {runner_up:.1f})")
+        raise GapNotFound(
+            f"no clear silhouette match (best {scores[best]:.1f}, rival {runner_up:.1f})"
+        )
     return check_range(best)
