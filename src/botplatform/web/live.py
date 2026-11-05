@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 
 from botplatform.contract import ACTIVE_STATUSES
-from botplatform.db import Run, RunEvent, SessionLocal
+from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 
 VIEWER_PORT = 6080
 VIEWER_RECHECK_SECONDS = 2.0
@@ -25,8 +25,10 @@ def worker_base_url(worker_id: str) -> str:
 
 def why_not_watchable(run: Run) -> str | None:
     """Why `run` cannot be watched live, or None if it can. The run page shows its link by this."""
-    if run.mode != "headful":
-        return "Only headful runs can be watched live"
+    with SessionLocal() as session:
+        bot = session.get(BotRecord, run.bot_id)
+    if bot is None or run.mode not in bot.watchable_modes:
+        return f"Runs in mode '{run.mode}' cannot be watched live"
     if run.status not in ACTIVE_STATUSES:
         return "This run is not active, so there is nothing to watch"
     if not run.worker_id:

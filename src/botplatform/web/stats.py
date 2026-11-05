@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, exists, select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from botplatform.contract import ACTIVE_STATUSES, Status
@@ -37,26 +37,27 @@ class Row:
 def collect(session: Session) -> list[Row]:
     viewed = exists().where(RunEvent.run_id == Run.id, RunEvent.type == "viewer_connected")
     query = (
-        select(Run.bot_id, Run.mode, Run.status, viewed)
+        select(Run.bot_id, Run.mode, Run.status, viewed, BotRecord.modes)
         .join(BotRecord, BotRecord.id == Run.bot_id)
         .where(Run.status.not_in([s.value for s in ACTIVE_STATUSES]))
-        # Newest bot first, like the Bots page. Alphabetically headful sorts first, so headless
-        # before headful needs the explicit case.
-        .order_by(
-            BotRecord.position.desc(),
-            Run.bot_id,
-            case((Run.mode == "headless", 0), else_=1),
-            Run.mode,
-        )
+        # Newest bot first, like the Bots page; the modes follow the bot's declared order below.
+        .order_by(BotRecord.position.desc(), Run.bot_id)
     )
     rows: dict[tuple[str, str], Row] = {}
-    for bot_id, mode, status, watched in session.execute(query):
+    rank: dict[tuple[str, str], tuple[int, int]] = {}  # (bot's place in the query, mode's index)
+    bots: dict[str, int] = {}
+    for bot_id, mode, status, watched, bot_modes in session.execute(query):
         row = rows.setdefault((bot_id, mode), Row(bot_id, mode))
+        bot_rank = bots.setdefault(bot_id, len(bots))
+        rank[bot_id, mode] = (
+            bot_rank,
+            bot_modes.index(mode) if mode in bot_modes else len(bot_modes),
+        )
         if watched:
             row.watched += 1
         else:
             row.counts[status] = row.counts.get(status, 0) + 1
-    return list(rows.values())
+    return sorted(rows.values(), key=lambda row: rank[row.bot, row.mode])
 
 
 def percent(value: float) -> str:
