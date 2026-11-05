@@ -2,28 +2,16 @@
 
 import base64
 import time
-from dataclasses import dataclass
 from typing import Any
 
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha.images import sniff_image
 from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, PUZZLE_INFO_JS
-from botplatform.bots.arcaptcha.session import Session, do, wait_for
+from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session, do, wait_for
 from botplatform.bots.arcaptcha.timeouts import StepTimeout
 from botplatform.bots.selenium_support import describe
 from botplatform.solver.movement import HANDLE
-
-
-@dataclass
-class CapturedPuzzle:
-    """One puzzle's images as fetched in the page, and the piece's inline `top` in px."""
-
-    n: int
-    challenge_id: str | None
-    background: bytes
-    piece: bytes
-    piece_top: int | None
 
 
 def capture_puzzle(

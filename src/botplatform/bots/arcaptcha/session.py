@@ -1,12 +1,10 @@
 """The state of one run, and the infrastructure every step needs."""
 
-from __future__ import annotations
-
 import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from selenium import webdriver
 
@@ -24,9 +22,6 @@ from botplatform.bots.selenium_support import (
 from botplatform.contract import RunContext
 from botplatform.profiles import BASELINE, Profile
 
-if TYPE_CHECKING:
-    from botplatform.bots.arcaptcha.puzzle import CapturedPuzzle
-
 DEMO_URL = "https://demo.arcaptcha.co/"
 
 
@@ -39,6 +34,17 @@ def make_watcher(driver: webdriver.Chrome) -> ResponseWatcher:
             "answer": lambda url: url.split("?")[0].endswith("/arcaptcha/api/answer"),
         },
     )
+
+
+@dataclass
+class CapturedPuzzle:
+    """One puzzle's images as fetched in the page, and the piece's inline `top` in px."""
+
+    n: int
+    challenge_id: str | None
+    background: bytes
+    piece: bytes
+    piece_top: int | None
 
 
 @dataclass

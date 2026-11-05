@@ -2,8 +2,8 @@
 
 `run` reads the credentials, starts Chrome with the spec's profile for the run's mode, and hands a
 `Session` to `run_flow`. Exceptions propagate to the worker, which turns them into an
-`unhandled_exception` result. The registered instances are at the bottom: the baseline, one bot for each
-other browser profile, and the solver bots.
+`unhandled_exception` result. The registered instances are at the bottom: the baseline, one bot
+for each other browser profile, and the solver bots.
 """
 
 import os
