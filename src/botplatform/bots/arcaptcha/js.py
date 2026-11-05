@@ -1,29 +1,5 @@
-"""JavaScript run in the page, and the CSS selectors of the slider."""
+"""JavaScript run in the page."""
 
-# The slider handle and the puzzle piece. Both were seen in captured DOM data and confirmed live.
-
-# Reads the challenge ID three ways, separately, so each answer stays distinct. The widget list is
-# `window.arcaptcha.widgets`, keyed by widget ID (from widget.arcaptcha.ir/1/api.js).
-WIDGET_CHALLENGE_ID_JS = """
-const attempt = (read) => {
-  try { return {value: read() || null}; } catch (error) { return {error: String(error)}; }
-};
-const arc = window.arcaptcha;
-const widgets = arc && arc.widgets ? arc.widgets : null;
-const ids = widgets ? Object.keys(widgets) : [];
-const widget = ids.length ? widgets[ids[0]] : null;
-const hidden = document.querySelector('#arcaptcha-token');
-return {
-  arcaptcha_present: !!arc,
-  widget_ids: ids,
-  widget_has_get_challenge_id: !!widget && typeof widget.getChallengeID === 'function',
-  widget_value: widget && typeof widget.getChallengeID === 'function'
-    ? attempt(() => widget.getChallengeID()) : null,
-  get_arc_token: arc && typeof arc.getArcToken === 'function' && ids.length
-    ? attempt(() => arc.getArcToken(ids[0])) : null,
-  hidden_field: hidden ? {value: hidden.value || null} : null
-};
-"""
 # What the site could learn about the browser, stored as is. The demo's credentials are public,
 # and these values are the evidence for which profile helps. It is async because of the
 # permissions query, so it ends by calling the callback that `execute_async_script` provides.
@@ -78,9 +54,8 @@ if (!navigator.permissions || !navigator.permissions.query) {
 }
 """
 # The puzzle's images. The piece is `img.puzzle` and the background is the other image whose src
-# has `/puzzles/` (both seen in the real DOM). The slider's selectors are NOT known, so instead of
-# inventing one this lists elements whose class name mentions slider, handle, track or drag, and
-# always records the piece's parent. A src already in `seen` belongs to an earlier puzzle.
+# has `/puzzles/` (both seen in the real DOM). It also records the rectangles around them. A src
+# already in `seen` belongs to an earlier puzzle.
 PUZZLE_INFO_JS = """
 const seen = arguments[0];
 const piece = document.querySelector('img.puzzle');
@@ -110,10 +85,6 @@ return {
   }),
   wrapper_rect: rect(background.parentElement),
   piece_parent_rect: rect(piece.parentElement),
-  slider_candidates: Array.from(document.querySelectorAll('[class*=slider i], [class*=handle i], '
-    + '[class*=track i], [class*=drag i]')).filter((el) => el !== piece).slice(0, 10).map(
-    (el) => ({tag: el.tagName.toLowerCase(), class: String(el.className), rect: rect(el)})
-  ),
   device_pixel_ratio: window.devicePixelRatio
 };
 """

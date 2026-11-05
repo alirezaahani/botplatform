@@ -385,6 +385,8 @@ Ten headless runs from Docker on 2026-11-03, using plain Chrome for Testing with
 | Login after a block | HTTP 400 with `{"msg":"Please solve captcha"}`, and a red toast with the same text |
 | `getChallengeID()` on a blocked run | Empty on all 10, as were `getArcToken` and the hidden field, so the decoded `create` response is the only source |
 
+The script that read `getChallengeID()`, `getArcToken` and the hidden field was later removed. Its values were empty on blocked runs, and the decoded `create` response is the source used.
+
 **Limits of this evidence:**
 
 - The cause of the block is unknown, because the server makes the decision.

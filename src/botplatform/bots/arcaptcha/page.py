@@ -6,7 +6,7 @@ from typing import Any
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha.js import BROWSER_SIGNALS_JS, WIDGET_CHALLENGE_ID_JS
+from botplatform.bots.arcaptcha.js import BROWSER_SIGNALS_JS
 from botplatform.bots.arcaptcha.session import Session, do, screenshot, wait_for
 from botplatform.bots.arcaptcha.timeouts import POLL_SECONDS, StepTimeout
 from botplatform.bots.arcaptcha.traffic import classify, drain
@@ -38,7 +38,6 @@ def open_and_tick(session: Session) -> BotResult | None:
         "find_checkbox",
     )
     screenshot(session, "before-click")
-    ctx.event("widget_challenge_id_before_click", widget_challenge_id(session))
     do(session, lambda: driver.find_element(By.CSS_SELECTOR, CHECKBOX).click(), retry=False)
     ctx.event("checkbox_clicked")
 
@@ -54,7 +53,6 @@ def open_and_tick(session: Session) -> BotResult | None:
     while time.monotonic() < deadline:
         do(session, lambda: drain(session))
         time.sleep(POLL_SECONDS)
-    ctx.event("widget_challenge_id_after_click", widget_challenge_id(session))
     watcher = session.watcher
     ctx.event(
         "create_requests",
@@ -138,10 +136,6 @@ def read_toast(session: Session) -> dict[str, str] | None:
     text = toast.text.strip()
     # The toast animates in, so its text can be empty for a moment. Wait for the message.
     return {"kind": kind, "text": text[:300]} if text else None
-
-
-def widget_challenge_id(session: Session) -> dict[str, Any]:
-    return do(session, lambda: session.driver.execute_script(WIDGET_CHALLENGE_ID_JS)) or {}
 
 
 def record_browser_signals(session: Session) -> None:

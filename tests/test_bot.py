@@ -96,8 +96,6 @@ def test_a_block_still_logs_in_and_a_good_login_never_upgrades_it(fake, run_bot,
     assert outcome.verdict == (Status.BLOCKED, "captcha_blocked")
     assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
     assert len(fake.logins) == 1
-    # A blocked widget never stores the challenge ID, and the bot records that it saw none.
-    assert outcome.ctx.one("widget_challenge_id_after_click")["hidden_field"] == {"value": None}
 
 
 def test_a_puzzle_no_one_solves_ends_blocked_but_still_tries_the_login(fake, run_bot):

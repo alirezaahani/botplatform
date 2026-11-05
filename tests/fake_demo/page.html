@@ -17,10 +17,6 @@
   <script>
     const CONFIG = __CONFIG__;
     let challengeId = null;
-    window.arcaptcha = {
-      widgets: {w1: {getChallengeID: () => challengeId}},
-      getArcToken: () => challengeId,
-    };
 
     // The same cipher as botplatform/bots/arcaptcha/codec.py. Plain JSON is accepted too.
     function decode(buffer) {
