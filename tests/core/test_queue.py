@@ -58,7 +58,7 @@ def test_claim_marks_the_run_running_with_a_lease(db: sessionmaker) -> None:
     (run_id,) = add_runs(db, 1)
     claim(db, "w1", 30)
     run = get(db, run_id)
-    assert (run.status, run.worker_id) == ("running", "w1")
+    assert (run.status, run.worker_id) == (Status.RUNNING, "w1")
     assert run.started_at is not None and run.lease_expires_at is not None
     assert run.lease_expires_at > run.started_at
 

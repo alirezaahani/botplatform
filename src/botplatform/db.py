@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from botplatform.config import Settings
+from botplatform.contract import Status
 
 
 class Base(DeclarativeBase):
@@ -51,18 +52,22 @@ class Run(Base):
     """One bot run. The `queued` rows are also the work queue."""
 
     __tablename__ = "runs"
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('queued', 'running', 'success', 'blocked', 'failed', 'timeout', 'error')",
-            name="runs_status_valid",
-        ),
-        Index("runs_status_queued_at", "status", "queued_at"),
-    )
+    __table_args__ = (Index("runs_status_queued_at", "status", "queued_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bot_id: Mapped[str] = mapped_column(ForeignKey("bots.id"))
     mode: Mapped[str] = mapped_column(String(50))
-    status: Mapped[str] = mapped_column(String(20), default="queued")
+    status: Mapped[Status] = mapped_column(
+        Enum(
+            Status,
+            name="runs_status_valid",
+            native_enum=False,
+            create_constraint=True,
+            length=20,
+            values_callable=lambda statuses: [status.value for status in statuses],
+        ),
+        default=Status.QUEUED,
+    )
     reason: Mapped[str | None] = mapped_column(String(100))
     error: Mapped[str | None] = mapped_column(Text)
     challenge_id: Mapped[str | None] = mapped_column(String(200))

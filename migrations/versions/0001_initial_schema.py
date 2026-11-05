@@ -33,7 +33,23 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("bot_id", sa.String(100), sa.ForeignKey("bots.id"), nullable=False),
         sa.Column("mode", sa.String(50), nullable=False),
-        sa.Column("status", sa.String(20), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "queued",
+                "running",
+                "success",
+                "blocked",
+                "failed",
+                "timeout",
+                "error",
+                name="runs_status_valid",
+                native_enum=False,
+                create_constraint=True,
+                length=20,
+            ),
+            nullable=False,
+        ),
         sa.Column("reason", sa.String(100)),
         sa.Column("error", sa.Text()),
         sa.Column("challenge_id", sa.String(200)),
@@ -44,10 +60,6 @@ def upgrade() -> None:
         sa.Column("ended_at", sa.DateTime(timezone=True)),
         sa.Column("worker_id", sa.String(100)),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True)),
-        sa.CheckConstraint(
-            "status IN ('queued', 'running', 'success', 'blocked', 'failed', 'timeout', 'error')",
-            name="runs_status_valid",
-        ),
     )
     op.create_index("runs_status_queued_at", "runs", ["status", "queued_at"])
     op.create_table(
