@@ -1,13 +1,12 @@
 """Open the page, tick the checkbox and judge the `create` answers."""
 
 import time
-from typing import Any
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha.responses import drain
-from botplatform.bots.arcaptcha.session import Session
+from botplatform.bots.arcaptcha.session import Create, Session
 from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, do, screenshot, wait_for
 from botplatform.bots.utils.page_scripts import record_browser_signals
 from botplatform.contract import BotResult, Status
@@ -60,12 +59,12 @@ def open_and_tick(session: Session) -> BotResult | None:
     return classify(session)
 
 
-def types(creates: list[dict[str, Any]]) -> list[str]:
+def types(creates: list[Create]) -> list[str]:
     """The types of the `create` answers we could decode. Only those decide the outcome."""
-    return [c["captcha_type"] for c in creates if c["captcha_type"] is not None]
+    return [c.captcha_type for c in creates if c.captcha_type is not None]
 
 
-def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotResult | None:
+def classify_create(creates: list[Create], create_failed: bool) -> BotResult | None:
     """The failure the `create` answers show, or None if the widget accepted us."""
     if not creates and create_failed:
         return BotResult(
@@ -74,7 +73,7 @@ def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotRe
     seen = types(creates)
     if "block" in seen:
         return BotResult(Status.BLOCKED, "captcha_blocked")
-    if not any(create["challenge_id"] for create in creates):
+    if not any(create.challenge_id for create in creates):
         return BotResult(Status.FAILED, "missing_challenge_id")
     latest = seen[-1] if seen else None
     if latest in {"puzzle", "question", "2fa"}:

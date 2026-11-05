@@ -4,7 +4,7 @@ from typing import Any
 
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.puzzle_capture import capture_puzzle
-from botplatform.bots.arcaptcha.session import Session
+from botplatform.bots.arcaptcha.session import Create, Session
 from botplatform.bots.utils.browser import raise_if_alert_open
 from botplatform.bots.utils.network import CapturedResponse, exchange_record
 
@@ -29,7 +29,7 @@ def drain(session: Session) -> bool:
         # Once per poll, for the latest puzzle: if two `create`s arrive together, the page
         # shows only the second puzzle, so the first has nothing left to capture.
         session.puzzle_pending = False
-        capture_puzzle(session, session.creates[-1]["challenge_id"])
+        capture_puzzle(session, session.creates[-1].challenge_id)
     return seen_create or bool(session.logins)
 
 
@@ -49,7 +49,7 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
         case _:
             challenge_id = None
     session.ctx.event("create_request", record)
-    session.creates.append({"captcha_type": info["captcha_type"], "challenge_id": challenge_id})
+    session.creates.append(Create(info["captcha_type"], challenge_id))
     info["has_challenge_id"] = challenge_id is not None
     if challenge_id:
         session.ctx.record_challenge_id(challenge_id)

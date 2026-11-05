@@ -50,6 +50,14 @@ def make_watcher(driver: webdriver.Chrome) -> ResponseWatcher:
     )
 
 
+@dataclass(frozen=True)
+class Create:
+    """One decoded `create` answer. Either field is None when the body had none."""
+
+    captcha_type: str | None
+    challenge_id: str | None
+
+
 @dataclass
 class CapturedPuzzle:
     """One puzzle's images as fetched in the page, and the piece's inline `top` in px."""
@@ -72,7 +80,7 @@ class Session(BrowserSession):
     rng: random.Random = field(default_factory=random.Random)
     watcher: ResponseWatcher = field(init=False)
 
-    creates: list[dict[str, Any]] = field(default_factory=list)  # decoded `create` answers
+    creates: list[Create] = field(default_factory=list)  # decoded `create` answers
     logins: list[dict[str, Any]] = field(default_factory=list)  # every `login`, in order
     answer_records: list[dict[str, Any]] = field(default_factory=list)  # every `answer`, in order
     puzzle_pending: bool = False  # the latest `create` is a puzzle that `drain` has to capture
