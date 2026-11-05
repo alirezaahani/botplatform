@@ -35,7 +35,6 @@ class ArcaptchaBot(Bot):
         self.spec = spec
         self.url = url
         self.timeouts = timeouts
-        self.profile = profile or spec.profile
         self._given_profile = profile  # a profile passed in wins over the one for the mode
 
     def profile_for(self, mode: str) -> Profile:

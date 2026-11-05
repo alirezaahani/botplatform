@@ -69,4 +69,9 @@ def test_every_profile_has_a_bot_that_runs_with_it():
     by_id = {bot.id: bot for bot in BOTS}
     for name, profile in PROFILES.items():
         bot = by_id["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
-        assert bot.profile is profile
+        assert bot.spec.profile is profile
+
+
+def test_modes_given_as_one_string_are_refused_not_split_into_letters():
+    with pytest.raises(TypeError, match="modes"):
+        stub_bot("a", modes="direct")

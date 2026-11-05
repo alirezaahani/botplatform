@@ -58,6 +58,8 @@ class Bot(ABC):
     def __init__(
         self, id: str, name: str, description: str = "", modes: Sequence[str] = ()
     ) -> None:
+        if isinstance(modes, str):
+            raise TypeError(f"modes must be a list of names, not the string {modes!r}")
         self.id = id
         self.name = name
         self.description = description
