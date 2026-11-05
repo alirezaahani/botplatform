@@ -50,7 +50,6 @@ def test_the_registry_lists_bots_in_the_order_they_were_added():
         "arcaptcha-webgl-fix",
         "arcaptcha-all-signals",
         "arcaptcha-all-signals-headless",
-        "arcaptcha-assisted",
         "arcaptcha-solver-cv-linear",
         "arcaptcha-solver-cv-eased",
         "arcaptcha-solver-silhouette-linear",

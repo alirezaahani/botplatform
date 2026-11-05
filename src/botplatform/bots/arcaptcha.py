@@ -66,11 +66,8 @@ class StepTimeouts:
     more_create_responses: float = 2
     login_response: float = 15
     toast: float = 5
-    # Only for a bot that waits for a person to solve the puzzle. The wait leaves room in the 180 s
-    # run limit for the page load (~8 s) and the login (~10 s). A rejected answer brings a new
-    # puzzle quickly, so if no `create` follows an `answer` within `answer_settle`, we take the
-    # puzzle as finished (a guess the live experiment checks).
-    person_wait: float = 130
+    # A rejected answer brings a new puzzle quickly, so if no `create` follows an `answer` within
+    # `answer_settle`, the solver takes the puzzle as finished.
     answer_settle: float = 3
     # How long a captured puzzle's two images get to load after its `create` arrives.
     puzzle_images: float = 5
@@ -287,7 +284,6 @@ class ArcaptchaBot(Bot):
     profile: ClassVar[Profile] = BASELINE
     # A profile for a mode, where `profile` is not right for every mode. Not listed: `profile`.
     profile_by_mode: ClassVar[dict[str, Profile]] = {}
-    wait_for_person: ClassVar[bool] = False
     solve_with: ClassVar[tuple[str, str] | None] = None  # (finder name, mover name)
 
     def __init__(
@@ -325,7 +321,6 @@ class ArcaptchaBot(Bot):
                     self.url,
                     self.timeouts,
                     profile,
-                    self.wait_for_person,
                     self.solve_with,
                 )
                 return scenario.run()
@@ -334,26 +329,6 @@ class ArcaptchaBot(Bot):
             host = urlsplit(self.url).hostname or ""
             details = redact(traceback.format_exc(), password, host)
             return BotResult(Status.ERROR, "unhandled_exception", details)
-
-
-class ArcaptchaAssistedBot(ArcaptchaBot):
-    """A diagnostic: does the site accept a correct answer from this browser?
-
-    A person solves the puzzle in the live viewer, so the run is never a bot success. Nothing
-    solves the slider yet, and before building a solver we want to see an accepted answer.
-    """
-
-    id = "arcaptcha-assisted"
-    name = "ARCaptcha demo (a person solves the puzzle)"
-    description = (
-        "A diagnostic, not an automatic bot. Ticks the checkbox like the others, and if the site "
-        "shows a puzzle, waits for a person to solve it in the live viewer (headful only), records "
-        "the answer request and response, then logs in. A verified login ends as success with the "
-        "reason human_solved, because a person did the solving."
-    )
-    modes: ClassVar[list[str]] = ["headful"]
-    profile = ALL_SIGNALS
-    wait_for_person = True
 
 
 def solver_bot(finder: str, mover: str) -> type[ArcaptchaBot]:
@@ -424,12 +399,10 @@ class Scenario:
         url: str = DEMO_URL,
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
         profile: Profile = BASELINE,
-        wait_for_person: bool = False,
         solve_with: tuple[str, str] | None = None,
     ) -> None:
         self.ctx = ctx
         self.profile = profile
-        self.wait_for_person = wait_for_person
         self.solve_with = solve_with
         self.rng = random.Random()
         self.solved = False  # the solver's answer was accepted
@@ -455,7 +428,6 @@ class Scenario:
         self.logins: list[CapturedResponse] = []
         # When the latest `answer` arrived, unless a new `create` followed it.
         self.answered_at: float | None = None
-        self.person_solved = False
         self.pending_puzzle: tuple[str | None] | None = None  # set by a `create`, taken by `_drain`
         self.puzzles = 0  # puzzles seen so far, captured or not
         self.puzzle_srcs: list[str] = []  # image srcs already taken, to tell a new puzzle apart
@@ -493,9 +465,6 @@ class Scenario:
         # Both steps found nothing wrong, so this is the only place a run can succeed.
         if self.solved:
             return earlier or verdict or BotResult(Status.SUCCESS, "solved")
-        if self.person_solved:
-            # Not a bot success: a person did the solving. The reason keeps it out of bot counts.
-            return earlier or verdict or BotResult(Status.SUCCESS, "human_solved")
         return earlier or verdict or BotResult(Status.SUCCESS)
 
     # -- Steps -------------------------------------------------------------------------------
@@ -543,42 +512,14 @@ class Scenario:
         )
         result = self._classify_create()
         unsolved = BotResult(Status.BLOCKED, "challenge_unsolved")
-        if self.wait_for_person and result == unsolved and self._types()[-1] == "puzzle":
-            return self._wait_for_person()
         if self.solve_with and result == unsolved and self._types()[-1] == "puzzle":
             return self._run_solver()
         return result
 
-    def _wait_for_person(self) -> BotResult | None:
-        """Wait while a person solves the puzzle, then go on to the login.
-
-        Every `answer` and later `create` is recorded by `_drain`. The answer's body is never read
-        to decide anything: the login is the judge. Like any step timeout, running out of time
-        ends the run without a login.
-        """
-        wait = self.timeouts.person_wait
-        self.ctx.event(
-            "waiting_for_person",
-            {"seconds": wait, "challenge_id": self.creates[-1]["challenge_id"]},
-        )
-        deadline = time.monotonic() + wait
-        while time.monotonic() < deadline:
-            self._do(self._drain)
-            if self._types()[-1:] != ["puzzle"]:
-                return self._classify_create()  # a block or an accept, handled as usual
-            if (
-                self.answered_at is not None
-                and time.monotonic() - self.answered_at >= self.timeouts.answer_settle
-            ):
-                self.person_solved = True
-                return None
-            time.sleep(POLL_SECONDS)
-        raise StepTimeout("human_wait_expired")
-
     def _run_solver(self) -> BotResult | None:
         """Solve the puzzle: find the gap, drag the handle there, up to `solve_attempts` times.
 
-        The answer's body never decides the outcome beyond what `_wait_for_person` also does: an
+        The answer's body never decides the outcome beyond this: an
         answer followed by no new puzzle within `answer_settle` is taken as accepted, and the
         login is the judge. Returns None for that, so the login runs.
         """

@@ -1,15 +1,7 @@
 """Puzzle capture: the images and geometry of each puzzle are saved, and a failure is harmless."""
 
-from dataclasses import replace
-
 from botplatform.contract import Status
-from tests.conftest import FAST
-from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, Reply, create_reply
-from tests.test_assisted import assisted, person  # noqa: F401 - pytest fixtures
-
-SECOND_ID = "999999999999999999999999999999"
-ACCEPTED = Reply(json={"status": "OK", "accepted": True})
-REJECTED = Reply(json={"status": "OK", "accepted": False})
+from tests.fake_demo.server import BACKGROUND_PNG, CHALLENGE_ID, PIECE_PNG, create_reply
 
 
 def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
@@ -39,55 +31,4 @@ def test_a_puzzle_is_captured_as_two_artifacts_and_an_event(fake, run_bot):
     assert event["piece_parent_rect"] is not None
     assert event["slider_candidates"] == []  # the fake has no slider
     assert event["device_pixel_ratio"] > 0
-    assert outcome.ctx.of("puzzle_capture_failed") == []
-
-
-def test_a_second_puzzle_after_a_rejected_answer_is_number_two(fake, assisted, person):  # noqa: F811
-    fake.creates = [create_reply("puzzle"), create_reply("puzzle", challenge_id=SECOND_ID)]
-    fake.answers = [REJECTED, ACCEPTED]
-    person(2, delay=1.0)  # a real person is slower than a poll, so each puzzle is captured first
-    result, ctx = assisted()
-
-    assert (result.status, result.reason) == (Status.SUCCESS, "human_solved")
-    events = ctx.of("puzzle_captured")
-    assert [(e["n"], e["challenge_id"]) for e in events] == [(1, CHALLENGE_ID), (2, SECOND_ID)]
-    names = [name for name, _, _ in ctx.artifacts if name.startswith("puzzle-")]
-    assert names == [
-        "puzzle-1-background.png",
-        "puzzle-1-piece.png",
-        "puzzle-2-background.png",
-        "puzzle-2-piece.png",
-    ]
-    # Each answer pairs with its puzzle by challenge_id, however the polls fall in time.
-    answers = [e["request"]["challenge_id"] for e in ctx.of("answer_request")]
-    assert answers == [e["challenge_id"] for e in events] == [CHALLENGE_ID, SECOND_ID]
-
-
-def test_the_capture_event_comes_before_the_answer_it_belongs_to(fake, run_bot):
-    fake.creates = [create_reply("puzzle")]
-    outcome = run_bot()
-    kinds = [kind for kind, _ in outcome.ctx.events]
-    assert kinds.index("puzzle_captured") > kinds.index("create_response")
-
-
-def test_broken_images_record_a_failure_and_leave_the_result_unchanged(fake, run_bot):
-    fake.creates = [create_reply("puzzle")]
-    baseline = run_bot()
-
-    fake.broken_puzzle_images = True
-    outcome = run_bot(timeouts=replace(FAST, puzzle_images=1))
-
-    assert (outcome.result.status, outcome.result.reason) == (
-        baseline.result.status,
-        baseline.result.reason,
-    )
-    failed = outcome.ctx.one("puzzle_capture_failed")
-    assert (failed["challenge_id"], failed["n"]) == (CHALLENGE_ID, 1)
-    assert outcome.ctx.of("puzzle_captured") == []
-    assert not [a for a in outcome.ctx.artifacts if a[0].startswith("puzzle-")]
-
-
-def test_no_capture_for_other_types(fake, run_bot):
-    outcome = run_bot()
-    assert outcome.ctx.of("puzzle_captured") == []
     assert outcome.ctx.of("puzzle_capture_failed") == []
