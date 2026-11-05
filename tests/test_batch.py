@@ -1,6 +1,5 @@
-"""The batch runner: planning, early stop and pauses with injected clocks, then the real queue."""
+"""The batch runner: planning and output with injected clocks, then the real queue."""
 
-import random
 import threading
 import time
 import uuid
@@ -13,16 +12,9 @@ from sqlalchemy.orm import sessionmaker
 from botplatform import batch
 from botplatform.contract import Status
 from botplatform.db import BotRecord, Run
-from botplatform.profiles import PROFILES, bot_id
 from botplatform.worker import queue
 
 A, B = ("arcaptcha", "headless"), ("arcaptcha-no-cdc", "headless")
-
-
-def test_bot_ids_follow_the_profile_names():
-    assert bot_id("baseline") == "arcaptcha"
-    assert bot_id("no-cdc") == "arcaptcha-no-cdc"
-    assert {bot_id(name) for name in PROFILES} >= {"arcaptcha", "arcaptcha-webgl-fix"}
 
 
 def test_plan_has_every_combination_the_right_number_of_times():
@@ -37,35 +29,6 @@ def test_plan_is_reproducible_by_seed_and_actually_shuffled():
     assert batch.plan(*args, seed=7) != batch.plan(*args, seed=8)
     ordered = sorted(batch.plan(*args, seed=7))
     assert batch.plan(*args, seed=7) != ordered
-
-
-def test_pause_is_pause_plus_jitter_within_range():
-    rng = random.Random(3)
-    values = [batch.pause_seconds(10, 5, rng) for _ in range(200)]
-    assert all(10 <= v <= 15 for v in values) and len(set(values)) > 100
-    assert batch.pause_seconds(10, 0, rng) == 10
-
-
-def test_early_stop_needs_a_streak_of_exactly_blocked_captcha_blocked():
-    stop = batch.EarlyStop(3)
-    for _ in range(2):
-        stop.record(A, "blocked", "captcha_blocked")
-    assert not stop.stopped(A)
-    stop.record(A, "success", None)  # a break resets the streak
-    for _ in range(2):
-        stop.record(A, "blocked", "captcha_blocked")
-    assert not stop.stopped(A)
-    stop.record(A, "blocked", "captcha_blocked")
-    assert stop.stopped(A) and not stop.stopped(B)
-    stop.record(B, "blocked", "other_reason")
-    assert not stop.stopped(B)
-
-
-def test_early_stop_zero_never_stops():
-    stop = batch.EarlyStop(0)
-    for _ in range(20):
-        stop.record(A, "blocked", "captcha_blocked")
-    assert not stop.stopped(A)
 
 
 class Fake:
@@ -108,7 +71,7 @@ class Fake:
         lines: list[str] = []
         result = batch.run_batch(
             items, create=self.create, status_of=self.status_of, sleep=self.sleep,
-            clock=self.clock, rng=random.Random(0), out=lines.append, **options,
+            clock=self.clock, out=lines.append, **options,
         )  # fmt: skip
         self.lines = lines
         return result
@@ -119,28 +82,20 @@ BLOCKED = ("blocked", "captcha_blocked", "id1")
 
 def test_run_batch_prints_a_line_per_run_and_pauses_between_runs_only():
     fake = Fake({A: [BLOCKED, ("success", None, "id2")]}, lag=2)
-    result = fake.run([A, A], pause=10, jitter=5)
+    result = fake.run([A, A], pause=10)
     assert fake.lines[0].startswith("1/2 arcaptcha headless blocked captcha_blocked id1 ")
     assert fake.lines[1].startswith("2/2 arcaptcha headless success - id2 ")
     assert [o.status for o in result.outcomes] == ["blocked", "success"]
     pauses = [s for s in fake.sleeps if s >= 10]  # polls are 1s
-    assert len(pauses) == 1 and 10 <= pauses[0] <= 15
-
-
-def test_early_stop_skips_the_rest_of_one_combination_and_says_so():
-    fake = Fake({A: [BLOCKED] * 10})
-    items = [A, B, A, A, B, A, A, A, B]
-    result = fake.run(items, stop_after=3, pause=0, jitter=0)
-    assert fake.created.count(A) == 3 and fake.created.count(B) == 3
-    assert result.skipped == {A: 3}
-    assert len([line for line in fake.lines if "skipping the rest" in line]) == 1
-    assert "skipped 3 by the early stop" in batch.summary(result)
-    assert "blocked/captcha_blocked 3" in batch.summary(result)
+    assert pauses == [10]
+    assert "arcaptcha headless: 2 runs: blocked/captcha_blocked 1, success 1" in batch.summary(
+        result
+    )
 
 
 def test_a_run_that_never_finishes_is_reported_and_the_batch_carries_on():
     fake = Fake({A: []}, lag=10**9)
-    result = fake.run([A, B], run_timeout=5, pause=0, jitter=0)
+    result = fake.run([A, B], run_timeout=5, pause=0)
     assert [o.status for o in result.outcomes] == ["wait_timeout", "wait_timeout"]
     assert fake.lines[0].startswith("1/2 arcaptcha headless wait_timeout")
 
@@ -153,20 +108,31 @@ def test_ctrl_c_stops_cleanly_and_names_the_run_left_to_the_worker():
 
     result = batch.run_batch(
         [A, B], create=fake.create, status_of=fake.status_of, sleep=interrupt,
-        clock=fake.clock, rng=random.Random(0), out=lambda line: None,
+        clock=fake.clock, out=lambda line: None,
     )  # fmt: skip
     assert result.interrupted and result.pending_run in fake.runs
     text = batch.summary(result)
     assert "Stopped by Ctrl-C" in text and "left to the worker" in text
 
 
-def test_arguments_default_to_every_profile_and_both_modes():
-    args = batch.parse_args([])
-    assert args.profiles == list(PROFILES)
-    assert (args.modes, args.runs, args.pause, args.jitter) == (["headless", "headful"], 10, 10, 5)
-    assert (args.run_timeout, args.stop_after) == (240, 5)
+def test_arguments_need_bots_and_default_to_both_modes():
+    args = batch.parse_args(["--bots", "a,b"])
+    assert (args.bots, args.modes, args.runs, args.pause) == (
+        ["a", "b"], ["headless", "headful"], 10, 10,
+    )  # fmt: skip
     with pytest.raises(SystemExit):
-        batch.parse_args(["--profiles", "nope"])
+        batch.parse_args([])
+    with pytest.raises(SystemExit):
+        batch.parse_args(["--bots", "a", "--modes", "nope"])
+
+
+def test_main_refuses_an_unknown_bot_or_unsupported_mode(clean_db: sessionmaker, capsys):
+    with clean_db.begin() as session:
+        session.add(BotRecord(id="solo", name="x", modes=["headless"]))
+    assert batch.main(["--bots", "missing"]) == 2
+    assert "missing" in capsys.readouterr().out
+    assert batch.main(["--bots", "solo", "--modes", "headful"]) == 2
+    assert "does not support mode 'headful'" in capsys.readouterr().out
 
 
 def test_batch_against_the_real_queue_with_a_stand_in_worker(db: sessionmaker):
@@ -199,8 +165,7 @@ def test_batch_against_the_real_queue_with_a_stand_in_worker(db: sessionmaker):
         items = batch.plan(["arcaptcha", "arcaptcha-no-cdc"], ["headless"], 3, seed=5)
         result = batch.run_batch(
             items, create=create, status_of=status_of, sleep=time.sleep, clock=time.monotonic,
-            rng=random.Random(0), pause=0, jitter=0, run_timeout=20, stop_after=0,
-            poll=0.05, out=lambda line: None,
+            pause=0, run_timeout=20, poll=0.05, out=lambda line: None,
         )  # fmt: skip
     finally:
         stop.set()
@@ -221,7 +186,7 @@ def test_web_side_modules_import_without_selenium():
 
     code = (
         "import sys; sys.modules['selenium'] = None\n"
-        "import botplatform.batch, botplatform.web.app, botplatform.web.bonus, botplatform.stats\n"
+        "import botplatform.batch, botplatform.web.app, botplatform.web.stats, botplatform.stats\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], check=False, capture_output=True, text=True

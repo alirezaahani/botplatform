@@ -1,4 +1,4 @@
-"""Newest bot first: the Bots page, the Bonus report and the positions that publish records."""
+"""Newest bot first: the Bots page, the Stats page and the positions that publish records."""
 
 from collections.abc import Iterator
 
@@ -11,7 +11,7 @@ from botplatform.db import BotRecord, session_factory
 from botplatform.web.app import app
 from botplatform.worker import registry
 from tests.conftest import stub_bot
-from tests.test_bonus import seed_run
+from tests.test_stats_page import seed_run, stats_rows
 
 
 @pytest.fixture
@@ -54,19 +54,14 @@ def test_bots_page_is_newest_first_with_ties_by_name(client: TestClient):
     assert order(text, ["old", "zeta", "alpha", "mid"]) == ["alpha", "zeta", "mid", "old"]
 
 
-def test_bonus_page_and_markdown_follow_the_same_order(client: TestClient):
+def test_stats_page_lists_the_newest_bot_first_and_headless_before_headful(client: TestClient):
     add_bots(("old", 0), ("new", 1))
     for bot in ("old", "new"):
         for mode in ("headful", "headless"):
             seed_run(bot=bot, mode=mode)
-    md = client.get("/bonus.md").text
-    rows = [line.split("|")[1:3] for line in md.splitlines() if line.startswith(("| old", "| new"))]
-    assert [(a.strip(), b.strip()) for a, b in rows] == [
+    assert list(stats_rows(client)) == [
         ("new", "headless"),
         ("new", "headful"),
         ("old", "headless"),
         ("old", "headful"),
     ]
-    page = client.get("/bonus").text
-    assert page.index("bot=new") < page.index("bot=old")
-    assert md.index("| new | headless") < md.index("| old | headless")
