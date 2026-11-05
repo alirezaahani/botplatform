@@ -220,6 +220,12 @@ Every step, every `challenge_id` and the decoded login request and response go i
 
 **Trade-off:** a clock that steps backwards during a run could misorder its events, and events written in one transaction share an `at`, so their order among themselves is not defined. Migration 0004 discards the old integer IDs. Downgrading numbers the events 1..n in `at` order.
 
+**Database sessions:** `db.py` creates one engine and one session factory (`SessionLocal`) when it is imported. Web routes get one session per request through `Depends`, and everything else opens a short `with SessionLocal() ...` block (`begin()` to write). Helpers take a `session` argument. The old `lru_cache` factory was lazy, and passing it around only hid that there is one engine per process.
+
+`launch_run` still commits explicitly. Committing when the dependency exits can happen after the response is sent, depending on the FastAPI version, so the browser could follow the redirect to a run that does not exist yet.
+
+**Trade-off:** importing `botplatform.db` now needs `DATABASE_URL` set, because `Settings()` is read at import. Compose gives it to `web`, `worker` and `migrate`, and the test compose file sets it too.
+
 ### 4c. Screenshots: in Postgres, in `run_artifacts`
 
 **Why:** the database stays the only data link between web and worker, and one volume holds all the data. A large number of runs would eventually need cleanup, which this scale does not need yet.

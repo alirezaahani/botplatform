@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 
 from botplatform.contract import ACTIVE_STATUSES
-from botplatform.db import BotRecord, Run, session_factory
+from botplatform.db import BotRecord, Run, SessionLocal
 from botplatform.worker import queue
 
 # Seconds to wait for one run. The default RUN_TIME_LIMIT_SECONDS is 180; if it is raised above
@@ -139,8 +139,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     seed = args.seed if args.seed is not None else random.SystemRandom().randrange(2**32)
-    sessions = session_factory()
-    with sessions() as session:
+    with SessionLocal() as session:
         known = {b.id: b for b in session.scalars(select(BotRecord).where(BotRecord.active))}
     for bot in args.bots:
         if bot not in known:
@@ -152,11 +151,11 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
 
     def create(bot: str, mode: str) -> uuid.UUID:
-        with sessions.begin() as session:
+        with SessionLocal.begin() as session:
             return queue.enqueue(session, bot, mode).id
 
     def status_of(run_id: uuid.UUID) -> tuple[str, str | None, str | None]:
-        with sessions() as session:
+        with SessionLocal() as session:
             run = session.get_one(Run, run_id)
             return run.status, run.reason, run.challenge_id
 

@@ -56,7 +56,7 @@ def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) ->
     if mode not in bot.modes:
         raise HTTPException(400, f"'{bot_id}' does not support mode '{mode}'")
     run = queue.enqueue(session, bot_id, mode)
-    session.commit()
+    session.commit()  # before the redirect, so the browser never follows it to a missing run
     return RedirectResponse(f"/runs/{run.id}", status_code=303)
 
 

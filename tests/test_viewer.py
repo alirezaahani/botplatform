@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketDisconnect
 
-from botplatform.db import BotRecord, Run, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.web import live
 from botplatform.web.app import app
 from tests.fake_demo.server import _Server
@@ -62,7 +62,7 @@ def client(
 def make_run(
     mode: str = "headful", status: str = "running", worker_id: str | None = "worker-1"
 ) -> uuid.UUID:
-    with session_factory().begin() as session:
+    with SessionLocal.begin() as session:
         run = Run(bot_id="arcaptcha", mode=mode, status=status, worker_id=worker_id)
         session.add(run)
         session.flush()
@@ -70,7 +70,7 @@ def make_run(
 
 
 def event_types(run_id: uuid.UUID) -> list[str]:
-    with session_factory()() as session:
+    with SessionLocal() as session:
         return list(session.scalars(select(RunEvent.type).where(RunEvent.run_id == run_id)))
 
 
@@ -113,7 +113,7 @@ def test_websocket_closes_when_the_run_ends(
     ) as socket:
         socket.send_bytes(b"hello")
         assert socket.receive_bytes() == b"echo:hello"
-        with session_factory().begin() as session:
+        with SessionLocal.begin() as session:
             session.get(Run, run_id).status = "success"  # type: ignore[union-attr]
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_bytes()

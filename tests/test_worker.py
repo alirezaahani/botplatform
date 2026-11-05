@@ -86,7 +86,7 @@ def test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit(
 ) -> None:
     run_id = claimed_run(db)
     started = time.monotonic()
-    run_in_child(db, run_id, "w1", settings(limit=2), fake_command(tmp_path, HANG))
+    run_in_child(run_id, "w1", settings(limit=2), fake_command(tmp_path, HANG))
     assert time.monotonic() - started < 6
     assert state(db, run_id) == ("timeout", "run_time_limit")
     assert is_dead(grandchild_pid(tmp_path))
@@ -96,7 +96,7 @@ def test_a_child_that_exits_without_a_result_is_bot_process_died(
     db: sessionmaker, tmp_path: Path
 ) -> None:
     run_id = claimed_run(db)
-    run_in_child(db, run_id, "w1", settings(), fake_command(tmp_path, EXIT))
+    run_in_child(run_id, "w1", settings(), fake_command(tmp_path, EXIT))
     assert state(db, run_id) == ("error", "bot_process_died")
     assert is_dead(grandchild_pid(tmp_path))
 
@@ -106,7 +106,7 @@ def test_the_lease_is_renewed_while_the_child_runs(db: sessionmaker, tmp_path: P
     with db.begin() as session:  # a lease that would expire well before the child ends
         session.execute(text("UPDATE runs SET lease_expires_at = now() + interval '1 second'"))
     run_in_child(
-        db, run_id, "w1", settings(limit=2, lease=30), fake_command(tmp_path, "time.sleep(1.5)")
+        run_id, "w1", settings(limit=2, lease=30), fake_command(tmp_path, "time.sleep(1.5)")
     )
     # Renewed to ~30 s ahead, so the child's own exit (code 0) is what ended the run.
     assert state(db, run_id) == ("error", "bot_process_died")
@@ -129,7 +129,7 @@ def test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status(
 
     thread = threading.Thread(target=reaper)
     thread.start()
-    run_in_child(db, run_id, "w1", settings(limit=20), fake_command(tmp_path, HANG))
+    run_in_child(run_id, "w1", settings(limit=20), fake_command(tmp_path, HANG))
     thread.join()
     assert state(db, run_id) == ("error", "worker_lost")
     assert is_dead(grandchild_pid(tmp_path))
@@ -143,11 +143,10 @@ def test_sigterm_kills_the_child_and_marks_the_run_worker_stopped(
         f"""
         import uuid
         from botplatform.config import Settings
-        from botplatform.db import session_factory
         from botplatform.worker.main import run_in_child, stop_on_sigterm
         stop_on_sigterm()
         run_in_child(
-            session_factory(), uuid.UUID({str(run_id)!r}), "w1", Settings(),
+            uuid.UUID({str(run_id)!r}), "w1", Settings(),
             {fake_command(tmp_path, HANG)!r},
         )
         """
@@ -168,7 +167,7 @@ def test_an_exception_raised_by_a_bot_becomes_an_unhandled_exception_result(
             raise RuntimeError("it broke")
 
     monkeypatch.setattr(child, "BOTS", [Exploding("arcaptcha", "x", modes=("headless",))])
-    result = child.execute(db, claimed_run(db))
+    result = child.execute(claimed_run(db))
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
     assert "RuntimeError: it broke" in result.error

@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
 from botplatform.contract import Bot, BotResult, Status
-from botplatform.db import Base, BotRecord, Run, session_factory
+from botplatform.db import Base, BotRecord, Run, SessionLocal, engine
 from botplatform.profiles import Profile
 from tests.fake_demo.server import FakeDemo
 
@@ -142,12 +142,11 @@ def display(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture
 def clean_db() -> Iterator[sessionmaker]:
     """A session factory on a database with no runs and no bots."""
-    sessions = session_factory()
-    Base.metadata.create_all(sessions.kw["bind"])
-    with sessions.begin() as session:
+    Base.metadata.create_all(engine)
+    with SessionLocal.begin() as session:
         session.execute(delete(Run))
         session.execute(delete(BotRecord))
-    yield sessions
+    yield SessionLocal
 
 
 @pytest.fixture

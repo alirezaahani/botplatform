@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from botplatform.db import BotRecord, Run, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.stats import wilson_interval
 from botplatform.web.app import app
 
@@ -24,7 +24,7 @@ def seed_run(
     started_at: datetime | None = None,
     ended_at: datetime | None = None,
 ) -> uuid.UUID:
-    with session_factory().begin() as session:
+    with SessionLocal.begin() as session:
         run = Run(
             id=uuid.uuid4(), bot_id=bot, mode=mode, status=status, queued_at=START,
             started_at=started_at, ended_at=ended_at,
@@ -104,7 +104,7 @@ def test_a_bot_with_only_watched_runs_shows_a_dash_for_the_rate(client: TestClie
 
 
 def test_runs_of_a_bot_that_is_no_longer_active_still_show(client: TestClient):
-    with session_factory().begin() as session:
+    with SessionLocal.begin() as session:
         session.get_one(BotRecord, "other").active = False
     seed_run(bot="other")
     assert ("other", "headless") in stats_rows(client)

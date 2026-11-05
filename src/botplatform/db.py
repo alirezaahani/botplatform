@@ -1,8 +1,7 @@
-"""The database schema and session factory, shared by web and worker."""
+"""The database schema, engine and session factory, shared by web and worker."""
 
 import uuid
 from datetime import datetime
-from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import (
@@ -99,7 +98,5 @@ class RunArtifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-@lru_cache
-def session_factory() -> sessionmaker:
-    engine = create_engine(Settings().database_url, pool_pre_ping=True)
-    return sessionmaker(engine, expire_on_commit=False)
+engine = create_engine(Settings().database_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(engine, expire_on_commit=False)

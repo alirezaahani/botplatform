@@ -6,11 +6,11 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from botplatform.db import session_factory
+from botplatform.db import SessionLocal
 
 
 def get_session() -> Iterator[Session]:
-    with session_factory()() as session:
+    with SessionLocal() as session:
         yield session
 
 
