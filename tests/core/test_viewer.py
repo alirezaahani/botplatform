@@ -58,7 +58,14 @@ def client(
         live, "worker_base_url", lambda worker_id: worker_ids.append(worker_id) or upstream
     )
     with clean_db.begin() as session:
-        session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless", "headful"]))
+        session.add(
+            BotRecord(
+                id="arcaptcha",
+                name="ARCaptcha",
+                modes=["headless", "headful"],
+                watchable_modes=["headful"],
+            )
+        )
     with TestClient(app) as test_client:
         yield test_client
 

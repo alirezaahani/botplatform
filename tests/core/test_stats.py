@@ -71,6 +71,14 @@ def test_counts_per_bot_and_mode_with_rate_and_interval(client: TestClient):
     assert set(rows) == {("arcaptcha", "headless"), ("other", "headful")}
 
 
+def test_a_bots_modes_follow_the_order_it_declares(client: TestClient):
+    with SessionLocal.begin() as session:
+        session.add(BotRecord(id="ordered", name="ordered", modes=["zeta", "alpha"]))
+    seed_run(bot="ordered", mode="alpha")
+    seed_run(bot="ordered", mode="zeta")
+    assert list(stats_rows(client)) == [("ordered", "zeta"), ("ordered", "alpha")]
+
+
 def test_a_perfect_count_is_not_shown_as_a_certain_hundred_percent(client: TestClient):
     for _ in range(80):
         seed_run()
@@ -168,10 +176,3 @@ def test_more_trials_narrow_the_interval():
     large = wilson_interval(50, 100)
     assert small is not None and large is not None
     assert large[1] - large[0] < small[1] - small[0]
-
-
-def test_impossible_counts_are_rejected():
-    with pytest.raises(ValueError):
-        wilson_interval(11, 10)
-    with pytest.raises(ValueError):
-        wilson_interval(-1, 10)

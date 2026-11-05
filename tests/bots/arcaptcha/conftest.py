@@ -9,6 +9,7 @@ import pytest
 
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
+from botplatform.bots.utils.browser import BrowserMode
 from botplatform.bots.utils.profiles import Profile
 from botplatform.contract import BotResult, Status
 from tests.bots.arcaptcha.fake_demo.server import FakeDemo
@@ -73,7 +74,7 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
             bot.profile, bot.profile_by_mode = profile, {}
         ctx = RecordingContext()
         started = time.monotonic()
-        result = bot.run(ctx)
+        result = bot.run(ctx, BrowserMode.HEADLESS)
         outcome = Outcome(result, ctx, time.monotonic() - started)
         return outcome
 

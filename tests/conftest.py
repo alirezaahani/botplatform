@@ -3,7 +3,8 @@
 import os
 import subprocess
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,6 @@ class RecordingContext:
     """A `RunContext` that keeps everything in memory."""
 
     run_id = "test-run"
-    mode = "headless"
 
     def __init__(self, on_artifact: Callable[[str], None] | None = None) -> None:
         self.events: list[tuple[str, dict[str, Any]]] = []
@@ -93,11 +93,15 @@ def db(clean_db: sessionmaker) -> sessionmaker:
     return clean_db
 
 
-class StubBot(Bot):
-    def run(self, ctx: Any) -> BotResult:
+class StubMode(StrEnum):
+    DIRECT = "direct"
+
+
+class StubBot(Bot[StubMode]):
+    def run(self, ctx: Any, mode: StubMode) -> BotResult:
         raise NotImplementedError
 
 
-def stub_bot(bot_id: str, modes: Sequence[str] = ("direct",)) -> Bot:
+def stub_bot(bot_id: str) -> Bot[StubMode]:
     """A bot that exists only to be registered."""
-    return StubBot(bot_id, bot_id, modes=modes)
+    return StubBot(bot_id, bot_id, modes=StubMode)

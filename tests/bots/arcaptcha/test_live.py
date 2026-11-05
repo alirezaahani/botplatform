@@ -6,6 +6,7 @@ import re
 import pytest
 
 from botplatform.bots.arcaptcha import BASELINE_BOT
+from botplatform.bots.utils.browser import BrowserMode
 from botplatform.contract import Status
 from tests.conftest import RecordingContext
 
@@ -16,7 +17,7 @@ def test_real_demo_site(monkeypatch):
     monkeypatch.setenv("ARCAPTCHA_USERNAME", os.environ.get("ARCAPTCHA_USERNAME", "demo"))
     monkeypatch.setenv("ARCAPTCHA_PASSWORD", os.environ.get("ARCAPTCHA_PASSWORD", "demo"))
     ctx = RecordingContext()
-    result = BASELINE_BOT.run(ctx)
+    result = BASELINE_BOT.run(ctx, BrowserMode.HEADLESS)
 
     login = ctx.of("login_request")
     print(f"\nstatus={result.status} reason={result.reason}")

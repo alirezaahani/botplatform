@@ -9,7 +9,7 @@ ARC = ["headless", "headful"]
 
 
 def test_the_registry_snapshot():
-    assert [(bot.id, bot.name, bot.modes) for bot in BOTS] == [
+    assert [(bot.id, bot.name, bot.mode_names()) for bot in BOTS] == [
         ("example", "Example bot", ["direct"]),
         ("arcaptcha", "ARCaptcha demo (Selenium)", ARC),
         ("arcaptcha-stealth-flags", "ARCaptcha demo (Selenium, stealth-flags)", ARC),

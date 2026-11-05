@@ -9,6 +9,7 @@ import pytest
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import SOLVER_BOTS
 from botplatform.bots.arcaptcha import gap_finders as gap
+from botplatform.bots.utils.browser import BrowserMode
 from botplatform.bots.utils.profiles import ALL_SIGNALS, ALL_SIGNALS_HEADLESS
 from botplatform.contract import Status
 from tests.bots.arcaptcha.conftest import FAST
@@ -114,6 +115,5 @@ def test_a_handle_that_never_responds_ends_the_run_without_an_answer(fake_puzzle
 @pytest.mark.parametrize("bot", SOLVER_BOTS, ids=[bot.id for bot in SOLVER_BOTS])
 def test_each_solver_bot_is_registered_and_picks_its_profile_by_mode(bot):
     assert bot in BOTS
-    assert bot.modes == ["headless", "headful"]
-    assert bot.profile_for("headful") is ALL_SIGNALS
-    assert bot.profile_for("headless") is ALL_SIGNALS_HEADLESS
+    assert bot.profile_for(BrowserMode.HEADFUL) is ALL_SIGNALS
+    assert bot.profile_for(BrowserMode.HEADLESS) is ALL_SIGNALS_HEADLESS
