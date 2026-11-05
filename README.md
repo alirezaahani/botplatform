@@ -182,7 +182,15 @@ To check the fake against the real site, run the live test (needs internet):
 docker compose -f compose.test.yaml run --rm --build tests pytest -m live -v -s
 ```
 
-CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launches a run of each bot. You can run that check locally with `.github/scripts/smoke.sh`.
+Lint, format and type checks (they need `uv sync --all-extras`, so that pyright can resolve OpenCV, numpy, Selenium and FastAPI):
+
+```
+uv run ruff check src tests migrations
+uv run ruff format --check src tests migrations
+uv run pyright
+```
+
+CI (`.github/workflows/ci.yml`) runs these checks and the tests, then starts the stack and launches a run of each bot. You can run that check locally with `.github/scripts/smoke.sh`.
 
 Real output of the test command:
 

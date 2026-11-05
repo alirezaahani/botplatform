@@ -539,6 +539,10 @@ Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv
 
 **Reaction to a challenge is a strategy.** A bot's reaction to a challenge is a strategy object (`Challenge`) on its spec, so a bot for another challenge type is a new class, not a flag. The default, `GiveUp`, ends the run as `blocked` / `challenge_unsolved`.
 
+## Linting and type checking
+
+CI runs ruff (its default rules plus `UP031`, `UP032` and `G`) and pyright in standard mode over `src`, `tests` and `migrations`. The code has no `type: ignore` comments. Log calls keep `%s` arguments so that the message is built only if the record is emitted, and ruff's `G` rules enforce this. f-strings are used everywhere else.
+
 ## Platform support
 
 amd64 only. ARM64 was not considered, and the README states this limitation.
