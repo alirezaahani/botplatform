@@ -1,5 +1,7 @@
 """Checks the registered bots and publishes them for the web container to read."""
 
+from typing import Any
+
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -9,22 +11,15 @@ from botplatform.contract import Bot
 from botplatform.db import BotRecord
 
 
-def validate(bots: list[Bot]) -> None:
+def validate(bots: list[Bot[Any]]) -> None:
     seen: set[str] = set()
     for bot in bots:
-        for attribute in ("id", "name", "modes"):
-            if not getattr(bot, attribute, None):
-                raise ValueError(
-                    f"{type(bot).__name__} '{bot.id}' must define a non-empty `{attribute}`"
-                )
         if bot.id in seen:
             raise ValueError(f"Duplicate bot id: {bot.id}")
-        if len(set(bot.modes)) != len(bot.modes):
-            raise ValueError(f"{bot.id} declares a mode twice: {bot.modes}")
         seen.add(bot.id)
 
 
-def publish(session: Session, bots: list[Bot]) -> None:
+def publish(session: Session, bots: list[Bot[Any]]) -> None:
     """Upsert every registered bot, and mark the rest inactive.
 
     Removed bots keep their last `position`, so they stay in place in the history.
@@ -33,7 +28,8 @@ def publish(session: Session, bots: list[Bot]) -> None:
         values = {
             "name": bot.name,
             "description": bot.description,
-            "modes": bot.modes,
+            "modes": bot.mode_names(),
+            "watchable_modes": [mode.value for mode in bot.watchable],
             "active": True,
             "position": position,
         }

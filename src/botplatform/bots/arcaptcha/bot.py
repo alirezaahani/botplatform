@@ -8,6 +8,7 @@ browser profile, and the solver bots.
 """
 
 import os
+from collections.abc import Mapping
 
 from botplatform.bots.arcaptcha.challenge import Challenge, GiveUp
 from botplatform.bots.arcaptcha.checkbox import open_and_tick, types
@@ -15,7 +16,13 @@ from botplatform.bots.arcaptcha.gap_finders import FINDERS
 from botplatform.bots.arcaptcha.login import log_in
 from botplatform.bots.arcaptcha.session import DEFAULT_TIMEOUTS, DEMO_URL, Session, StepTimeouts
 from botplatform.bots.arcaptcha.slider_solver import SliderSolver
-from botplatform.bots.utils.browser import BrowserSession, SeleniumBot, describe, screenshot
+from botplatform.bots.utils.browser import (
+    BrowserMode,
+    BrowserSession,
+    SeleniumBot,
+    describe,
+    screenshot,
+)
 from botplatform.bots.utils.drag import MOVERS
 from botplatform.bots.utils.profiles import (
     ALL_SIGNALS,
@@ -42,7 +49,7 @@ class ArcaptchaBot(SeleniumBot):
         description: str,
         *,
         profile: Profile = BASELINE,
-        profile_by_mode: dict[str, Profile] | None = None,
+        profile_by_mode: Mapping[BrowserMode, Profile] | None = None,
         challenge: Challenge | None = None,
         url: str = DEMO_URL,
         timeouts: StepTimeouts = DEFAULT_TIMEOUTS,
@@ -52,14 +59,14 @@ class ArcaptchaBot(SeleniumBot):
         self.url = url
         self.timeouts = timeouts
 
-    def run(self, ctx: RunContext) -> BotResult:
+    def run(self, ctx: RunContext, mode: BrowserMode) -> BotResult:
         if not os.environ.get("ARCAPTCHA_USERNAME") or not os.environ.get("ARCAPTCHA_PASSWORD"):
             return BotResult(
                 Status.ERROR,
                 "missing_credentials",
                 "Set ARCAPTCHA_USERNAME and ARCAPTCHA_PASSWORD in .env",
             )
-        return super().run(ctx)
+        return super().run(ctx, mode)
 
     def steps(self, browser: BrowserSession) -> BotResult:
         session = Session(
@@ -130,7 +137,10 @@ def solver_bot(finder: str, mover: str) -> ArcaptchaBot:
             "Headful uses the all-signals profile and headless the all-signals-headless one."
         ),
         profile=ALL_SIGNALS,
-        profile_by_mode={"headful": ALL_SIGNALS, "headless": ALL_SIGNALS_HEADLESS},
+        profile_by_mode={
+            BrowserMode.HEADFUL: ALL_SIGNALS,
+            BrowserMode.HEADLESS: ALL_SIGNALS_HEADLESS,
+        },
         challenge=SliderSolver(finder, mover),
     )
 

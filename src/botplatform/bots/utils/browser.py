@@ -6,9 +6,10 @@ Starting Chrome, and the calls every step needs: `do` (alert handling), `wait_fo
 import os
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from selenium import webdriver
@@ -135,16 +136,18 @@ def screenshot(session: BrowserSession, name: str) -> None:
         session.ctx.event("screenshot_failed", {"name": name, "error": describe(error)})
 
 
-BROWSER_MODES = ("headless", "headful")
+class BrowserMode(StrEnum):
+    HEADLESS = "headless"
+    HEADFUL = "headful"
 
 
-class SeleniumBot(Bot):
+class SeleniumBot(Bot[BrowserMode]):
     """A bot that drives Chrome. Implement `steps`; this picks the profile for the mode, starts
     Chrome, records the profile, and turns a `StepTimeout` into a `timeout` result.
 
     Any other exception gets a screenshot named `error` and propagates to the worker, which turns
     it into an `unhandled_exception` result. `profile_by_mode` overrides `profile` for the modes
-    it lists.
+    it lists. Only headful runs can be watched live.
     """
 
     def __init__(
@@ -152,28 +155,21 @@ class SeleniumBot(Bot):
         id: str,
         name: str,
         description: str = "",
-        modes: Sequence[str] = BROWSER_MODES,
         *,
         profile: Profile = BASELINE,
-        profile_by_mode: dict[str, Profile] | None = None,
+        profile_by_mode: Mapping[BrowserMode, Profile] | None = None,
     ) -> None:
-        super().__init__(id, name, description, modes)
-        # A mistyped mode would silently run headful (`headless=ctx.mode == "headless"`).
-        if unknown := [mode for mode in self.modes if mode not in BROWSER_MODES]:
-            raise ValueError(f"Bot '{id}' has modes {unknown}, which Chrome cannot run")
-        # A mistyped key would silently fall back to `profile`.
-        if unlisted := [mode for mode in profile_by_mode or {} if mode not in self.modes]:
-            raise ValueError(f"Bot '{id}' has profiles for {unlisted}, which are not its modes")
+        super().__init__(id, name, description, modes=BrowserMode, watchable={BrowserMode.HEADFUL})
         self.profile = profile
         self.profile_by_mode = profile_by_mode or {}
 
-    def profile_for(self, mode: str) -> Profile:
+    def profile_for(self, mode: BrowserMode) -> Profile:
         """The browser profile for `mode`: the one listed for it, else `profile`."""
         return self.profile_by_mode.get(mode, self.profile)
 
-    def run(self, ctx: RunContext) -> BotResult:
-        profile = self.profile_for(ctx.mode)
-        with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
+    def run(self, ctx: RunContext, mode: BrowserMode) -> BotResult:
+        profile = self.profile_for(mode)
+        with chrome(headless=mode is BrowserMode.HEADLESS, profile=profile) as driver:
             browser = BrowserSession(ctx, driver)
             try:
                 ctx.event("browser_profile", profile.settings())
