@@ -4,7 +4,7 @@ Every bot that uses the ARCaptcha scenario (not only `arcaptcha-assisted`) captu
 
 ## What is captured, per puzzle n (counted from 1 in the run)
 
-- Artifacts `puzzle-<n>-background.<ext>` and `puzzle-<n>-piece.<ext>`. The bytes are fetched by `fetch(src)` inside the page, so the request has the browser's origin and cookies. The extension and content type come from the bytes.
+- Artifacts `puzzle-<n>-background.<ext>` and `puzzle-<n>-piece.<ext>`. The bytes are fetched by `fetch(src)` inside the page, so the request has the browser's origin and cookies. The extension and content type come from the response's `Content-Type` header (`.bin` and `application/octet-stream` if it is missing or unknown).
 - A `puzzle_captured` event with: `challenge_id` (of the latest `create`), `n`, the artifact names, and for each image its `src`, `natural_width`/`natural_height` and on-screen `rect`. The piece also has its inline `style_left`/`style_top` and `computed_left`/`computed_top`. The event also holds `wrapper_rect` (the background's parent), `piece_parent_rect`, `slider_candidates` and `device_pixel_ratio`.
 - If the images do not load in time or the fetch fails, a `puzzle_capture_failed` event with `challenge_id`, `n` and the error (type and first line of the message).
 

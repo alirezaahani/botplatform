@@ -35,3 +35,13 @@ def test_images_that_cannot_be_fetched_are_noted_and_do_not_change_the_result(fa
     assert outcome.verdict == (Status.BLOCKED, "challenge_unsolved")  # the same as with images
     assert outcome.ctx.one("puzzle_capture_failed")["challenge_id"] == CHALLENGE_ID
     assert outcome.ctx.of("puzzle_captured") == []
+
+
+def test_images_without_a_content_type_are_saved_as_unknown_bytes(fake, run_bot):
+    fake.creates = [create_reply("puzzle")]
+    fake.image_type = None
+    outcome = run_bot()
+
+    artifacts = {name: (kind, data) for name, kind, data in outcome.ctx.artifacts}
+    assert artifacts["puzzle-1-background.bin"] == ("application/octet-stream", BACKGROUND_PNG)
+    assert artifacts["puzzle-1-piece.bin"] == ("application/octet-stream", PIECE_PNG)

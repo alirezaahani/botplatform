@@ -1,12 +1,12 @@
 """Capturing the puzzle's images and finding its handle."""
 
 import base64
+import mimetypes
 import time
 from typing import Any
 
 from selenium.webdriver.common.by import By
 
-from botplatform.bots.arcaptcha.images import sniff_image
 from botplatform.bots.arcaptcha.js import FETCH_IMAGES_JS, PUZZLE_INFO_JS
 from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session, do, wait_for
 from botplatform.bots.arcaptcha.timeouts import StepTimeout
@@ -47,8 +47,11 @@ def capture_puzzle(
         for part in ("background", "piece"):
             data = base64.b64decode(fetched[part]["b64"])
             raw[part] = data
-            content_type, extension = sniff_image(data, fetched[part]["content_type"])
-            name = f"puzzle-{n}-{part}.{extension}"
+            content_type = (fetched[part]["content_type"] or "").split(";")[0].strip()
+            extension = mimetypes.guess_extension(content_type)
+            if not extension:  # no header, or a type Python does not know
+                content_type, extension = "application/octet-stream", ".bin"
+            name = f"puzzle-{n}-{part}{extension}"
             ctx.artifact(name, content_type, data)
             saved[part] = name
         session.capture = CapturedPuzzle(

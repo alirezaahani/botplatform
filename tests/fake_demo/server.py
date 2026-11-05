@@ -132,6 +132,7 @@ class FakeDemo:
         self._has_checkbox = True
         self._second_create = False
         self._images_missing = False
+        self.image_type: str | None = "image/png"  # the content type of the puzzle images
         self._alert_on_click: str | None = None
         self._puzzle = Puzzle(BACKGROUND_PNG, PIECE_PNG)
         self._slider: float | None = None  # piece left = handle left * this; None: no handle
@@ -278,7 +279,7 @@ class FakeDemo:
             if self._images_missing:
                 return Response(status_code=404)
             png = self._puzzle.piece if part == "piece" else self._puzzle.background
-            return Response(png, media_type="image/png")
+            return Response(png, media_type=self.image_type)
 
         @app.post("/arcaptcha/api/answer")
         async def answer(request: Request) -> Response:
