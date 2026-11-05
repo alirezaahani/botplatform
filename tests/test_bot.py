@@ -6,8 +6,7 @@ from dataclasses import replace
 import pytest
 from selenium.webdriver.common.by import By
 
-from botplatform.bots import arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, Scenario, redact
+from botplatform.bots.arcaptcha import ArcaptchaBot, Session, core, page, redact, run_flow
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
@@ -353,7 +352,7 @@ def test_screenshots_never_show_the_password(fake, credentials):
             seen.append((name, field[0].get_attribute("value") if field else "no field"))
 
         ctx = RecordingContext(on_artifact)
-        Scenario(ctx, driver, USERNAME, PASSWORD, fake.url, FAST).run()
+        run_flow(Session(ctx, driver, USERNAME, PASSWORD, fake.url, FAST))
 
     names = [name for name, _ in seen]
     assert "after-login.png" in names
@@ -365,7 +364,7 @@ def test_unhandled_exception_text_hides_the_password(fake, run_bot, monkeypatch)
     def explode(self):
         raise RuntimeError(f"cannot log in with {PASSWORD}")
 
-    monkeypatch.setattr(arcaptcha.Scenario, "_log_in", explode)
+    monkeypatch.setattr(page, "log_in", explode)
     outcome = run_bot()
 
     assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "unhandled_exception")
@@ -394,7 +393,7 @@ def test_run_keeps_the_site_host_in_the_error_but_hides_the_password(monkeypatch
     def explode(self):
         raise RuntimeError("could not load https://demo.arcaptcha.co/ for demo")
 
-    monkeypatch.setattr(arcaptcha.Scenario, "run", explode)
+    monkeypatch.setattr(core, "run_flow", explode)
     result = ArcaptchaBot(url="https://demo.arcaptcha.co/").run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")

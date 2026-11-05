@@ -3,7 +3,8 @@
 import pytest
 
 from botplatform.bots import BOTS, arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts, core
+from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts, traffic
+from botplatform.bots.arcaptcha.traffic import exchange_record
 from botplatform.bots.selenium_support import CapturedResponse, chrome
 from botplatform.contract import Status
 from botplatform.profiles import BASELINE, HEADFUL_USER_AGENT, PROFILES, STEALTH_FLAGS, Profile
@@ -99,7 +100,7 @@ def test_run_records_profile_signals_and_create_request(fake, credentials, profi
 
 def test_undecodable_request_body_is_noted_not_fatal():
     garbage = CapturedResponse("create", "u", 201, b'{"captcha_type":"accept"}', None, b"\x01\x02")
-    record = arcaptcha.Scenario._exchange_record(garbage)
+    record = exchange_record(garbage)
     assert record["request"] is None
     assert record["request_note"].startswith("decode failed")
     assert record["request_raw_length"] == 2
@@ -107,7 +108,7 @@ def test_undecodable_request_body_is_noted_not_fatal():
 
 
 def test_missing_request_body_is_noted():
-    record = arcaptcha.Scenario._exchange_record(
+    record = exchange_record(
         CapturedResponse("create", "u", 201, b"{}", None, None, "WebDriverException: gone")
     )
     assert record["request"] is None
@@ -115,14 +116,14 @@ def test_missing_request_body_is_noted():
 
 
 def test_run_survives_a_failed_request_decode(fake, credentials, monkeypatch):
-    real = core.decode_body
+    real = traffic.decode_body
 
     def decode(data: bytes):
         if b"site_key" in data and b"challenge_id" not in data:
             raise ValueError("cannot decode the request")
         return real(data)
 
-    monkeypatch.setattr(core, "decode_body", decode)
+    monkeypatch.setattr(traffic, "decode_body", decode)
     ctx = RecordingContext()
     result = ArcaptchaBot(url=fake.url, timeouts=StepTimeouts(3, 2, 3, 1, 3, 1.5)).run(ctx)
 
