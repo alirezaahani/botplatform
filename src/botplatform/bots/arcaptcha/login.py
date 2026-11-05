@@ -61,11 +61,15 @@ def verify_login(http_status: int, body: Any, toast: dict[str, str]) -> BotResul
     Both signals are needed: the status is 200 and the toast is a success toast that shows the
     message from the response body.
     """
-    message = body.get("msg") if isinstance(body, dict) else None
+    match body:
+        case {"msg": str() as message}:
+            pass
+        case _:
+            message = None
     confirmed = (
         http_status == 200
         and toast["kind"] == "success"
-        and isinstance(message, str)
+        and message is not None
         and message in toast["text"]
     )
     if confirmed:

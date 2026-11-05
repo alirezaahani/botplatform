@@ -25,11 +25,11 @@ def drain(session: Session) -> bool:
         else:
             handle_create(session, response)
             seen_create = True
-    if session.pending_puzzle is not None:
+    if session.puzzle_pending:
         # Once per poll, for the latest puzzle: if two `create`s arrive together, the page
         # shows only the second puzzle, so the first has nothing left to capture.
-        (challenge_id,), session.pending_puzzle = session.pending_puzzle, None
-        capture_puzzle(session, challenge_id)
+        session.puzzle_pending = False
+        capture_puzzle(session, session.creates[-1]["challenge_id"])
     return seen_create or bool(session.logins)
 
 
@@ -41,13 +41,13 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
         info["body_error"] = response.body_error
     elif "response_note" in record:
         info["decode_error"] = record["response_note"]
-    challenge_id = None
     if isinstance(decoded, dict):
         info["captcha_type"] = decoded.get("captcha_type")
-        content = decoded.get("content")
-        challenge_id = content.get("challenge_id") if isinstance(content, dict) else None
-    if not isinstance(challenge_id, str) or not challenge_id:
-        challenge_id = None
+    match decoded:
+        case {"content": {"challenge_id": str() as found}} if found:
+            challenge_id = found
+        case _:
+            challenge_id = None
     session.ctx.event("create_request", record)
     session.creates.append({"captcha_type": info["captcha_type"], "challenge_id": challenge_id})
     info["has_challenge_id"] = challenge_id is not None
@@ -55,4 +55,4 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
         session.ctx.record_challenge_id(challenge_id)
     session.capture = None
     session.ctx.event("create_response", info)
-    session.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
+    session.puzzle_pending = info["captcha_type"] == "puzzle"

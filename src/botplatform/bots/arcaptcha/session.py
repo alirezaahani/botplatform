@@ -75,7 +75,7 @@ class Session(BrowserSession):
     creates: list[dict[str, Any]] = field(default_factory=list)  # decoded `create` answers
     logins: list[dict[str, Any]] = field(default_factory=list)  # every `login`, in order
     answer_records: list[dict[str, Any]] = field(default_factory=list)  # every `answer`, in order
-    pending_puzzle: tuple[str | None] | None = None  # set by a `create`, taken by `drain`
+    puzzle_pending: bool = False  # the latest `create` is a puzzle that `drain` has to capture
     puzzles: int = 0  # puzzles seen so far, captured or not
     puzzle_srcs: list[str] = field(default_factory=list)  # image srcs already taken
     capture: CapturedPuzzle | None = None  # the current puzzle's bytes, if captured
