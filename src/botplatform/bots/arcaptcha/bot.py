@@ -12,10 +12,12 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from botplatform.bots.arcaptcha.checkbox import open_and_tick, types
+from botplatform.bots.arcaptcha.gap_finders import FINDERS
 from botplatform.bots.arcaptcha.login import log_in
 from botplatform.bots.arcaptcha.session import DEFAULT_TIMEOUTS, DEMO_URL, Session, StepTimeouts
 from botplatform.bots.arcaptcha.slider_solver import SliderSolver
 from botplatform.bots.utils.browser import BrowserSession, SeleniumBot, describe, screenshot
+from botplatform.bots.utils.drag import MOVERS
 from botplatform.bots.utils.profiles import (
     ALL_SIGNALS,
     ALL_SIGNALS_HEADLESS,
@@ -183,9 +185,7 @@ PROFILE_BOTS: list[ArcaptchaBot] = [
     ArcaptchaBot(profile_spec(p)) for p in PROFILES.values() if p.name != BASELINE.name
 ]
 
+# One bot for every finder and mover, so a new one cannot go without a bot.
 SOLVER_BOTS: list[ArcaptchaBot] = [
-    ArcaptchaBot(solver_spec("halo", "linear")),
-    ArcaptchaBot(solver_spec("halo", "eased")),
-    ArcaptchaBot(solver_spec("silhouette", "linear")),
-    ArcaptchaBot(solver_spec("silhouette", "eased")),
+    ArcaptchaBot(solver_spec(finder, mover)) for finder in FINDERS for mover in MOVERS
 ]
