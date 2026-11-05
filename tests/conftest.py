@@ -1,15 +1,22 @@
+"""Shared setup: the fake demo site, a recording `RunContext`, and one way to run a bot."""
+
+import os
+import subprocess
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import sessionmaker
 
-from botplatform.bots.arcaptcha import BASELINE_SPEC, ArcaptchaBot, StepTimeouts
-from botplatform.contract import BotResult
+from botplatform.bots import BOTS
+from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
+from botplatform.contract import Bot, BotResult, Status
 from botplatform.db import Base, BotRecord, Run, session_factory
+from botplatform.profiles import Profile
 from tests.fake_demo.server import FakeDemo
 
 USERNAME = "tester@example.com"
@@ -59,16 +66,28 @@ class RecordingContext:
 
 @dataclass
 class Outcome:
+    """A finished run: what the bot returned, what it recorded, and how long it took."""
+
     result: BotResult
     ctx: RecordingContext
     seconds: float
 
+    @property
+    def verdict(self) -> tuple[Status, str | None]:
+        return self.result.status, self.result.reason
 
-def assert_no_password(outcome: Outcome) -> None:
-    """The password must not appear in events, artifact names, the reason or the error text."""
-    everything = repr(outcome.ctx.events) + repr([a[0] for a in outcome.ctx.artifacts])
-    everything += f"{outcome.result.reason} {outcome.result.error}"
-    assert PASSWORD not in everything
+    def assert_no_password(self) -> None:
+        """The password must not be in events, artifact names, the reason or the error text."""
+        everything = repr(self.ctx.events) + repr([a[0] for a in self.ctx.artifacts])
+        everything += f"{self.result.reason} {self.result.error}"
+        assert PASSWORD not in everything
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark every test that drives Chrome, so `-m browser` and `-m 'not browser'` split the suite."""
+    for item in items:
+        if "fake" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.browser)
 
 
 @pytest.fixture
@@ -87,26 +106,69 @@ def credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
-    """Run the real bot with real Chrome against the fake. Every run checks for the password."""
+    """Run a registered ARCaptcha bot with real Chrome against the fake, and check for leaks."""
 
-    def run(url: str | None = None, timeouts: StepTimeouts = FAST) -> Outcome:
+    def run(
+        bot_id: str = "arcaptcha",
+        *,
+        url: str | None = None,
+        timeouts: StepTimeouts = FAST,
+        profile: Profile | None = None,
+    ) -> Outcome:
+        registered = next(bot for bot in BOTS if bot.id == bot_id)
+        assert isinstance(registered, ArcaptchaBot)
+        bot = ArcaptchaBot(registered.spec, url=url or fake.url, timeouts=timeouts, profile=profile)
         ctx = RecordingContext()
         started = time.monotonic()
-        result = ArcaptchaBot(BASELINE_SPEC, url=url or fake.url, timeouts=timeouts).run(ctx)
+        result = bot.run(ctx)
         outcome = Outcome(result, ctx, time.monotonic() - started)
-        assert_no_password(outcome)
+        outcome.assert_no_password()
         return outcome
 
     return run
 
 
 @pytest.fixture
-def db() -> Iterator[sessionmaker]:
-    """A session factory on an empty database with one bot published."""
+def display(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """A virtual display for headful Chrome, on a number of its own for each test process."""
+    number = 100 + os.getpid() % 800
+    xvfb = subprocess.Popen(
+        ["Xvfb", f":{number}", "-screen", "0", "1280x800x24", "-nolisten", "tcp"]
+    )
+    for _ in range(50):
+        if Path(f"/tmp/.X11-unix/X{number}").exists():
+            break
+        time.sleep(0.1)
+    monkeypatch.setenv("DISPLAY", f":{number}")
+    yield
+    xvfb.terminate()
+    xvfb.wait()
+
+
+@pytest.fixture
+def clean_db() -> Iterator[sessionmaker]:
+    """A session factory on a database with no runs and no bots."""
     sessions = session_factory()
     Base.metadata.create_all(sessions.kw["bind"])
     with sessions.begin() as session:
         session.execute(delete(Run))
         session.execute(delete(BotRecord))
-        session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless"]))
     yield sessions
+
+
+@pytest.fixture
+def db(clean_db: sessionmaker) -> sessionmaker:
+    """The clean database with one bot published."""
+    with clean_db.begin() as session:
+        session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless"]))
+    return clean_db
+
+
+class StubBot(Bot):
+    def run(self, ctx: Any) -> BotResult:
+        raise NotImplementedError
+
+
+def stub_bot(bot_id: str, modes: tuple[str, ...] = ("direct",)) -> Bot:
+    """A bot that exists only to be registered."""
+    return StubBot(bot_id, bot_id, modes=modes)
