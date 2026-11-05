@@ -1,9 +1,9 @@
-"""The gap by one-dimensional silhouette matching, independent of the halo detector in `cv/`.
+"""The gap by one-dimensional silhouette matching, independent of the halo detector in `detect.py`.
 
 The piece's row (`piece_top`) and exact shape (its alpha channel) are known, so only x is unknown.
 For each x the score is the mean brightness in a thin ring just outside the silhouette (the light
 halo around the gap) minus the mean brightness inside it (the darkened gap). The answer is the x
-with the highest score. No reference data and no use of `find_piece_mask` or `extract_geometry`.
+with the highest score. No reference data and no use of `find_piece_mask`.
 """
 
 from botplatform.solver.gap import MAX_ANSWER, GapNotFound, check_range

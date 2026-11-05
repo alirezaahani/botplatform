@@ -30,15 +30,14 @@ def check_range(target: int) -> int:
 def find_gap_x_cv(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
     """The gap by image analysis of the background alone (the piece arguments are ignored).
 
-    Uses the vendored detection from the captcha-solve project on the background decoded in
-    memory: the gap body square's left x, minus 10.
+    Uses the detection in `detect.py` on the background decoded in memory: the gap body
+    square's left x, minus 10.
     """
     # Imported here so that importing the bot registry does not need OpenCV.
     import cv2
     import numpy as np
 
-    from botplatform.solver.cv.detect import find_piece_mask
-    from botplatform.solver.cv.geometry import extract_geometry
+    from botplatform.solver.detect import body_left, find_piece_mask
 
     try:
         image = cv2.imdecode(np.frombuffer(background_png, np.uint8), cv2.IMREAD_COLOR)
@@ -50,10 +49,10 @@ def find_gap_x_cv(background_png: bytes, piece_png: bytes, piece_top: int) -> in
         mask = find_piece_mask(image)
         if mask is None:
             raise GapNotFound("no gap found in the background")
-        geometry = extract_geometry(mask)
+        left = body_left(mask)
     except (ValueError, cv2.error) as error:
         raise GapNotFound(f"gap analysis failed: {error}") from None
-    return check_range(int(geometry.body_bbox[0]) - BODY_TO_ANSWER_OFFSET)
+    return check_range(left - BODY_TO_ANSWER_OFFSET)
 
 
 def find_gap_x_silhouette(background_png: bytes, piece_png: bytes, piece_top: int) -> int:
