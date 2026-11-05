@@ -204,7 +204,7 @@ A one-shot `migrate` service runs Alembic first, and web and workers wait for it
 
 ### 4b. Run details: `runs` plus an append-only `run_events` table
 
-Every step, every `challenge_id` and the login response go in `run_events`. Passwords are never stored.
+Every step, every `challenge_id` and the decoded login request and response go in `run_events`. The bots log in with the public demo account, so nothing is redacted (see "Redaction removed" below).
 
 **Why:** existing evidence cannot be overwritten, the UI gets a timeline, and any bot can add events without schema changes.
 
@@ -421,7 +421,7 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Why:** the run history is the evidence store, and a bot's identity is its profile, so comparing profiles is comparing bots' runs, with no new tables or UI. The bots are always registered, with no flag, because hiding them would add a setting and a second code path. The signals are captured for every profile so a block can be compared with what the browser looked like.
 
-**Cost we accept:** more bots in the list. The capture reads `create` request bodies (never login, which holds the password). A failed decode of either body is noted in the event and never fails the run.
+**Cost we accept:** more bots in the list. The capture reads every watched request body (`create`, `login` and `answer`), so the login's password is stored. A failed decode of either body is noted in the event and never fails the run.
 
 **Not verified:** nothing here has run against demo.arcaptcha.co. The tests use the fake page, so they show the mechanism works (flags, script, events), not that any profile reduces blocking. The real request body may arrive in a form Chrome does not put in the network event; the code then falls back to `Network.getRequestPostData`, and records a note if that fails too.
 
@@ -485,6 +485,14 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 **Why:** the bonus report measured whether the first `create` answer was a block. Now that the solver bots finish the login, the measure that matters is verified success, and the report was built around the question that has been answered. The batch had grown extras (jitter, early stop) that repeating a measurement does not need, and it could not run the solver bots at all. All eleven bots are kept by the user's decision, so every recorded comparison can still be re-run, at the cost of a longer list on `/bots`.
 
 **Cost:** the page no longer tells why a run was blocked, only that it was; the reason is on each run's page. Old links to `/bonus` return 404. The evidence files record results made with the old report and flags.
+
+### Redaction removed: passwords are stored and shown
+
+**What:** the redaction of exception text, the blanking of the password field before screenshots and the rule that login request bodies are never captured are gone. An exception now propagates from the bot and the worker stores its traceback as is. Every request body the watcher sees, login included, is read and recorded as a `login_request`, `create_request` or `answer_request` event. Runs stored before this change keep a `login_response` event instead of `login_request`.
+
+**Why:** the bots use the demo's public login (`demo`/`demo`, printed on its login page) and the web port is bound to 127.0.0.1. Redaction protected nothing, and it garbled tracebacks, because every "demo" became `[password]`.
+
+**Cost we accept:** a real password given in `ARCAPTCHA_PASSWORD` would be stored in the database and visible on run pages, in events and in screenshots. Use only the demo account.
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
