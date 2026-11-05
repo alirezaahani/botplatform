@@ -61,7 +61,7 @@ The Chrome download has its own build stage that depends only on the version. Ea
 
 ## 2. Bot interface
 
-### 2a. Contract: `run(ctx) -> BotResult`
+### 2a. Contract: `run(ctx, mode) -> BotResult`
 
 Each bot implements one Python method and owns its browser. An optional helper covers Selenium setup, and `ctx.record_challenge_id()` writes to the database immediately.
 
@@ -553,13 +553,25 @@ Exact match with `halo_target`: 8 of 8; largest difference 0 px; within 4 px of 
 - The Selenium helpers moved to `bots/utils/`: `browser.py` (`chrome`, `do`, `wait_for`, `screenshot`, `BrowserSession`), `profiles.py`, `network.py` (`ResponseWatcher`), `drag.py` and `page_scripts.py`. A `SeleniumBot` base class there picks the profile for the mode, starts Chrome, records `browser_profile`, turns a `StepTimeout` into a `timeout` result and takes an `error` screenshot. A bot implements only `steps(browser)`. The core still never imports them.
 - `solver/` is gone. Its files went to `bots/utils/drag.py` (the generic drag) and to `bots/arcaptcha/` (`gap_finders.py`, `gap_halo_detector.py`). The `arcaptcha/` modules are named for the step they do: `session`, `checkbox`, `login`, `responses`, `codec`, `puzzle_capture`, `slider_solver`.
 - The `cv` finder is now called `halo`, after what it looks for. The bot ids and the evidence use the new name.
-- The tests mirror the code: `tests/core/`, `tests/bots/utils/` (against a plain local page, with no ARCaptcha imports) and `tests/bots/arcaptcha/` (with the fake demo and fixtures). Three wiring checks were added: the migrations against the models (`alembic upgrade head` then `alembic check`, in a database of its own), `SeleniumBot` refusing modes Chrome cannot run and `profile_by_mode` keys that are not its modes, and the solver bots being generated from `FINDERS` x `MOVERS`, with a snapshot of the whole registry.
+- The tests mirror the code: `tests/core/`, `tests/bots/utils/` (against a plain local page, with no ARCaptcha imports) and `tests/bots/arcaptcha/` (with the fake demo and fixtures). Three wiring checks were added: the migrations against the models (`alembic upgrade head` then `alembic check`, in a database of its own), `SeleniumBot` refusing modes Chrome cannot run and `profile_by_mode` keys that are not its modes, and the solver bots being generated from `FINDERS` x `MOVERS`, with a snapshot of the whole registry. (The `SeleniumBot` checks were later replaced by per-bot mode enums, see "Types instead of runtime checks" below.)
 - The migrations are squashed into one `0001_initial_schema.py`.
 - `BotSpec` is gone: `ArcaptchaBot` takes the variant as constructor arguments, which `SeleniumBot` mostly already had, plus its `challenge`. `Challenge` is an abstract base class like `Bot`, and `GiveUp` and `SliderSolver` subclass it, so the code shows what they are.
 
 **Why:** the helpers had no reason to sit beside one site, and a second Selenium bot should not need to copy them. A mistyped mode or profile key used to fall back silently (a typo in a mode would run headful), so it is refused at construction. The solver bots were a hand-written list that could drift from the finders and movers. Nothing is deployed, so there is no database to migrate and the history of schema changes is only noise.
 
 **Cost:** an existing database that was built from the old migrations must be recreated (`docker compose down -v`). Paths in the older sections of this file and in the evidence were updated, but the text of those sections still describes what was decided at the time. Taking a change from captcha-solve into `gap_halo_detector.py` is still a manual job.
+
+## Types instead of runtime checks
+
+**What:**
+- Each bot owns a `StrEnum` of its modes (`Bot[M]`, `modes=...`, `run(ctx, mode)`), and lists its `watchable` modes, which the worker publishes. `SeleniumBot` uses `BrowserMode`. See 5b.
+- The run status column is read and written as `Status`, with a check constraint in the database.
+- Results of our own page scripts (in-page fetches, browser signals, puzzle info, slider positions) are validated with pydantic models, or typed as dataclasses where nothing needs validating.
+- `BOTS` is a dict keyed by bot id. The startup check for duplicate ids is gone: a repeated id collapses into one entry, and the registry snapshot test catches it.
+
+**Why:** a misspelled mode or a wrong status is now a type error that pyright reports, instead of a check that runs at construction or at startup. Fewer lines of hand-written checks.
+
+**Cost:** the duplicate-id rule now depends on someone updating the snapshot test when a bot is added, which the README asks for. The schema change was made by editing `0001` in place, so an existing database must be recreated (`docker compose down -v`).
 
 ## Linting and type checking
 
