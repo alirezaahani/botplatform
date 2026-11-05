@@ -16,5 +16,7 @@ def sniff_image(data: bytes, header: str | None) -> tuple[str, str]:
         return "image/webp", "webp"
     if header and header.startswith("image/"):
         content_type = header.split(";")[0].strip()
-        return content_type, content_type.split("/")[1].split("+")[0]
+        extension = content_type.split("/")[1].split("+")[0]
+        if extension:
+            return content_type, extension
     return "application/octet-stream", "bin"

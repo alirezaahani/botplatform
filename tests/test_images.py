@@ -37,7 +37,9 @@ def test_unknown_bytes_fall_back_to_an_image_header(header, expected):
     assert sniff_image(b"<svg/>", header) == expected
 
 
-@pytest.mark.parametrize("header", [None, "", "text/html", "application/json"])
+@pytest.mark.parametrize(
+    "header", [None, "", "text/html", "application/json", "image/", "image/;charset=x"]
+)
 def test_unknown_bytes_without_an_image_header_are_octet_stream(header):
     assert sniff_image(b"nothing known", header) == ("application/octet-stream", "bin")
 
