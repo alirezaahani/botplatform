@@ -22,6 +22,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("modes", postgresql.JSONB(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
+        sa.Column("position", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
@@ -41,6 +42,7 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True)),
         sa.Column("ended_at", sa.DateTime(timezone=True)),
         sa.Column("worker_id", sa.String(100)),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True)),
         sa.CheckConstraint(
             "status IN ('queued', 'running', 'success', 'blocked', 'failed', 'timeout', 'error')",
             name="runs_status_valid",
@@ -49,7 +51,7 @@ def upgrade() -> None:
     op.create_index("runs_status_queued_at", "runs", ["status", "queued_at"])
     op.create_table(
         "run_events",
-        sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "run_id",
             postgresql.UUID(as_uuid=True),
@@ -60,7 +62,7 @@ def upgrade() -> None:
         sa.Column("type", sa.String(100), nullable=False),
         sa.Column("data", postgresql.JSONB()),
     )
-    op.create_index("run_events_run_id", "run_events", ["run_id", "id"])
+    op.create_index("run_events_run_id", "run_events", ["run_id", "at"])
     op.create_table(
         "run_artifacts",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
