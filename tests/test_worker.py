@@ -32,7 +32,11 @@ EXIT = "sys.exit(3)"
 
 
 def fake_command(tmp_path: Path, behavior: str) -> list[str]:
-    return [sys.executable, "-c", FAKE_CHILD.format(pidfile=str(tmp_path / "pid"), behavior=behavior)]
+    return [
+        sys.executable,
+        "-c",
+        FAKE_CHILD.format(pidfile=str(tmp_path / "pid"), behavior=behavior),
+    ]
 
 
 def grandchild_pid(tmp_path: Path) -> int:
@@ -71,9 +75,7 @@ def state(sessions: sessionmaker, run_id: uuid.UUID) -> tuple[str, str | None]:
 
 
 def settings(limit: int = 30, lease: int = 30, renew: float = 0.2) -> Settings:
-    return Settings(
-        run_time_limit_seconds=limit, lease_seconds=lease, lease_renew_seconds=renew
-    )
+    return Settings(run_time_limit_seconds=limit, lease_seconds=lease, lease_renew_seconds=renew)
 
 
 def test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit(
@@ -99,9 +101,7 @@ def test_a_child_that_exits_without_a_result_is_bot_process_died(
 def test_the_lease_is_renewed_while_the_child_runs(db: sessionmaker, tmp_path: Path) -> None:
     run_id = claimed_run(db)
     with db.begin() as session:  # a lease that would expire well before the child ends
-        session.execute(
-            text("UPDATE runs SET lease_expires_at = now() + interval '1 second'")
-        )
+        session.execute(text("UPDATE runs SET lease_expires_at = now() + interval '1 second'"))
     run_in_child(
         db, run_id, "w1", settings(limit=2, lease=30), fake_command(tmp_path, "time.sleep(1.5)")
     )
@@ -121,9 +121,7 @@ def test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status(
     def reaper() -> None:
         grandchild_pid(tmp_path)
         with db.begin() as session:
-            session.execute(
-                text("UPDATE runs SET lease_expires_at = now() - interval '1 second'")
-            )
+            session.execute(text("UPDATE runs SET lease_expires_at = now() - interval '1 second'"))
             queue.reap_expired(session)
 
     thread = threading.Thread(target=reaper)

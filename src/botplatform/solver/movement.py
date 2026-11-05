@@ -13,8 +13,6 @@ from typing import Any
 
 from selenium.webdriver.common.action_chains import ActionChains
 
-from botplatform.bots import drag_probe
-
 Path = list[tuple[int, int, float]]
 
 LINEAR_STEPS = 8
@@ -60,6 +58,9 @@ MOVERS: dict[str, Callable[[int, random.Random], Path]] = {
 }
 
 # The handle's and piece's `left` right now, in px (None when missing).
+# The widget being dragged: the slider's handle and the puzzle piece it moves.
+HANDLE = "div.draggable"
+PIECE = "img.puzzle"
 LEFTS_JS = """
 const left = (selector) => {
   const el = document.querySelector(selector);
@@ -102,9 +103,7 @@ def perform_drag(
             device.clear_actions()
 
     def lefts() -> dict[str, Any]:
-        return (
-            do(lambda: driver.execute_script(LEFTS_JS, drag_probe.HANDLE, drag_probe.PIECE)) or {}
-        )
+        return do(lambda: driver.execute_script(LEFTS_JS, HANDLE, PIECE)) or {}
 
     x = y = 0
     actions.move_to_element(handle).click_and_hold()

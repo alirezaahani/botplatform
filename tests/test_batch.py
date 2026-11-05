@@ -223,5 +223,7 @@ def test_web_side_modules_import_without_selenium():
         "import sys; sys.modules['selenium'] = None\n"
         "import botplatform.batch, botplatform.web.app, botplatform.web.bonus, botplatform.stats\n"
     )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-c", code], check=False, capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stderr

@@ -1,5 +1,6 @@
-# Copied unchanged from the captcha-solve project (src/captcha_solve/detect.py), so this
-# repository builds and runs the solver without a dependency on another repository.
+# Copied from the captcha-solve project (src/captcha_solve/detect.py), so this repository builds
+# and runs the solver without a dependency on another repository. Only import order and
+# formatting were changed here.
 """Locate the missing puzzle piece inside an image.
 
 The images we deal with are ordinary photographs/graphics with a puzzle
@@ -25,7 +26,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-__all__ = ["find_piece_mask", "find_enclosed_regions"]
+__all__ = ["find_enclosed_regions", "find_piece_mask"]
 
 # Pixels have to stand out from the local background by this much to count
 # as part of the bright fence.
@@ -91,9 +92,7 @@ def find_enclosed_regions(
 
     enclosed = ((flooded != 2) & (fence == 0)).astype(np.uint8)
     # Drop single-pixel noise that the fence happened to ring in.
-    enclosed = cv2.morphologyEx(
-        enclosed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)
-    )
+    enclosed = cv2.morphologyEx(enclosed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
     count, labels, stats, _ = cv2.connectedComponentsWithStats(enclosed, 8)
     regions = []

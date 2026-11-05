@@ -1,6 +1,5 @@
 """The web UI. It reads and queues runs through the database, and never imports bot code."""
 
-import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated

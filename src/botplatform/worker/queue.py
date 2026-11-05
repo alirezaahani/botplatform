@@ -12,7 +12,7 @@ from botplatform.contract import Status
 from botplatform.db import Run, RunEvent
 
 
-def _lease_end(lease_seconds: int):  # noqa: ANN202 - a SQL expression
+def _lease_end(lease_seconds: int):
     return func.now() + func.make_interval(0, 0, 0, 0, 0, 0, lease_seconds)
 
 

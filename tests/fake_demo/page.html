@@ -22,7 +22,7 @@
       getArcToken: () => challengeId,
     };
 
-    // The same cipher as botplatform/bots/arcaptcha_codec.py. Plain JSON is accepted too.
+    // The same cipher as botplatform/bots/arcaptcha/codec.py. Plain JSON is accepted too.
     function decode(buffer) {
       try {
         return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(buffer));
@@ -52,7 +52,6 @@
       document.getElementById('widget-message').appendChild(el);
     }
 
-    // There is no real slider: the "solve" button stands in for a person finishing the puzzle.
     function showPopup(text) {
       const old = document.getElementById('challenge');
       if (old) old.remove();
@@ -61,13 +60,6 @@
       popup.style.cssText = 'width:300px;height:150px;border:1px solid #999';
       popup.textContent = text;
       if (text === 'puzzle') {
-        const solve = document.createElement('button');
-        solve.id = 'solve';
-        solve.type = 'button';
-        solve.dataset.cid = challengeId;
-        solve.textContent = 'solve';
-        solve.addEventListener('click', () => sendAnswer());
-        popup.appendChild(solve);
         // Like the real widget: a background image and, in an absolutely positioned div, the piece.
         const base = CONFIG.api_origin + '/arcaptcha/api/puzzles/' + challengeId + '/undefined/';
         const wrapper = document.createElement('div');

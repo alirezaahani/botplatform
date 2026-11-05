@@ -44,14 +44,14 @@ def execute(sessions: sessionmaker, run_id: uuid.UUID) -> BotResult:
         run = session.get_one(Run, run_id)
         bot_id, mode = run.bot_id, run.mode
 
-    bot_class = next((bot for bot in BOTS if bot.id == bot_id), None)
-    if bot_class is None:
+    bot = next((bot for bot in BOTS if bot.id == bot_id), None)
+    if bot is None:
         return BotResult(Status.ERROR, "bot_unavailable", f"This worker has no bot '{bot_id}'")
-    if mode not in bot_class.modes:
+    if mode not in bot.modes:
         return BotResult(Status.ERROR, "mode_unavailable", f"'{bot_id}' has no mode '{mode}'")
 
     try:
-        return bot_class().run(DatabaseRunContext(sessions, run_id, mode))
+        return bot.run(DatabaseRunContext(sessions, run_id, mode))
     except Exception:  # noqa: BLE001 - any bot failure becomes an error result
         return BotResult(Status.ERROR, "unhandled_exception", traceback.format_exc())
 

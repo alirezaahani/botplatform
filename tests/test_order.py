@@ -4,27 +4,18 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
-from botplatform.bots import BOTS
-from botplatform.contract import Bot
-from botplatform.db import Base, BotRecord, Run, session_factory
+from botplatform.db import BotRecord, session_factory
 from botplatform.web.app import app
 from botplatform.worker import registry
+from tests.conftest import stub_bot
 from tests.test_bonus import seed_run
 
 
-def make_bot(bot_id: str) -> type[Bot]:
-    return type(bot_id, (Bot,), {"id": bot_id, "name": bot_id, "modes": ["direct"]})
-
-
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    sessions = session_factory()
-    Base.metadata.create_all(sessions.kw["bind"])
-    with sessions.begin() as session:
-        session.execute(delete(Run))
-        session.execute(delete(BotRecord))
+def client(clean_db: sessionmaker) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
 
@@ -41,26 +32,8 @@ def order(text: str, names: list[str]) -> list[str]:
     return sorted(names, key=text.index)
 
 
-def test_the_registry_lists_bots_in_the_order_they_were_added():
-    assert [bot.id for bot in BOTS] == [
-        "example",
-        "arcaptcha",
-        "arcaptcha-stealth-flags",
-        "arcaptcha-no-cdc",
-        "arcaptcha-webgl-fix",
-        "arcaptcha-all-signals",
-        "arcaptcha-all-signals-headless",
-        "arcaptcha-assisted",
-        "arcaptcha-drag-probe",
-        "arcaptcha-solver-cv-linear",
-        "arcaptcha-solver-cv-eased",
-        "arcaptcha-solver-silhouette-linear",
-        "arcaptcha-solver-silhouette-eased",
-    ]
-
-
 def test_publish_sets_the_position_and_updates_it(client: TestClient):
-    a, b, c = make_bot("a"), make_bot("b"), make_bot("c")
+    a, b, c = stub_bot("a"), stub_bot("b"), stub_bot("c")
     sessions = session_factory()
     with sessions.begin() as session:
         registry.publish(session, [a, b, c])

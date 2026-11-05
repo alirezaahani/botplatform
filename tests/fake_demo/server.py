@@ -96,36 +96,97 @@ class _Server:
         self.sock.close()
 
 
+@dataclass(frozen=True)
+class Puzzle:
+    """A puzzle the fake serves: both images and the piece's `top` in px."""
+
+    background: bytes
+    piece: bytes
+    top: int = 20
+
+
+@dataclass
+class Toast:
+    """What the page shows after the login response. `kind` and `text` default to what the
+    response says (green and its message for 200, red otherwise)."""
+
+    show: bool = True
+    kind: str | None = None
+    text: str | None = None
+
+
 class FakeDemo:
+    """The fake site. Set the replies (`creates`, `login`, `toast`) or call a scenario method, run
+    the bot, then inspect `logins`, `answers` and `create_requests`."""
+
     def __init__(self) -> None:
-        # What the tests configure
-        self.page: Reply = Reply(action="reply")  # `hang` makes the page load never finish
-        self.checkbox = True
-        self.second_create = False  # the page sends a second `create` after the first answer
-        self.alert_on_click: str | None = None
-        self.slider: float | None = None  # a draggable handle; piece left = handle left * this
-        self.broken_puzzle_images = False  # the puzzle's image URLs answer 404
-        # A real puzzle for the solver: (background PNG, piece PNG, piece top). With `target` set,
-        # an answer equal to it is accepted (success true) and any other is rejected (false).
-        self.puzzle: tuple[bytes, bytes, int] | None = None
-        self.target: int | None = None
-        self.ignore_presses = 0  # the handle ignores this many presses, like a widget not ready
-        self.toast: dict[str, Any] = {"none": False, "kind": None, "text": None}
         self.creates: list[Reply] = [create_reply("accept")]  # the last one repeats
-        # What the page's own answer button posts to `answer`. The last reply repeats.
-        self.answers: list[Reply] = [Reply(json={"status": "OK", "accepted": True})]
         self.login = Reply(status=200, json={"msg": "You are logged in successfully!"})
+        self.toast = Toast()
         # What the tests inspect
         self.create_requests = 0
         self.answer_requests: list[dict[str, Any]] = []
-        self.image_requests: list[str] = []
         self.logins: list[dict[str, Any]] = []
+        # Page behavior, changed through the scenario methods
+        self._page_hangs = False
+        self._has_checkbox = True
+        self._second_create = False
+        self._images_missing = False
+        self._alert_on_click: str | None = None
+        self._puzzle = Puzzle(BACKGROUND_PNG, PIECE_PNG)
+        self._slider: float | None = None  # piece left = handle left * this; None: no handle
+        self._ignore_presses = 0
+        self._target: int | None = None
         self._release = threading.Event()  # set on teardown, to free every hanging request
 
         self._api = _Server(self._api_app())
         self._site = _Server(self._site_app())
         self.url = self._site.origin + "/"
         self.api_origin = self._api.origin
+
+    # -- Scenarios -------------------------------------------------------------------------------
+
+    def hang_page(self) -> None:
+        """The page request never finishes."""
+        self._page_hangs = True
+
+    def remove_checkbox(self) -> None:
+        self._has_checkbox = False
+
+    def break_puzzle_images(self) -> None:
+        """The puzzle's image URLs answer 404."""
+        self._images_missing = True
+
+    def send_second_create(self) -> None:
+        """After the first answer, the page asks for a second `create` at once."""
+        self._second_create = True
+
+    def alert_on_click(self, text: str) -> None:
+        self._alert_on_click = text
+
+    def serve_puzzles(
+        self,
+        puzzle: Puzzle,
+        *,
+        target: int,
+        ids: list[str],
+        ignore_presses: int = 0,
+    ) -> None:
+        """Every `create` is a puzzle (one id each, the last repeats) with a draggable handle.
+
+        An answer equal to `target` is accepted and any other is rejected with a new puzzle. The
+        handle ignores its first `ignore_presses` presses, like a widget that is not ready yet.
+        """
+        self.creates = [create_reply("puzzle", challenge_id=cid) for cid in ids]
+        self._puzzle = puzzle
+        self._slider = 1.0
+        self._target = target
+        self._ignore_presses = ignore_presses
+
+    @property
+    def answers(self) -> list[Any]:
+        """The `answer` of every answer request, in order."""
+        return [request.get("answer") for request in self.answer_requests]
 
     def start(self) -> None:
         self._api.start()
@@ -169,19 +230,23 @@ class FakeDemo:
 
         @app.get("/")
         async def index() -> Response:
-            if self.page.action == "hang":
+            if self._page_hangs:
                 await self._hang()
             config = {
                 "api_origin": self.api_origin,
-                "second_create": self.second_create,
-                "alert_on_click": self.alert_on_click,
-                "slider": self.slider,
-                "puzzle": None if self.puzzle is None else {"top": self.puzzle[2]},
-                "ignore_presses": self.ignore_presses,
-                "toast": self.toast,
+                "second_create": self._second_create,
+                "alert_on_click": self._alert_on_click,
+                "slider": self._slider,
+                "puzzle": None if self._slider is None else {"top": self._puzzle.top},
+                "ignore_presses": self._ignore_presses,
+                "toast": {
+                    "none": not self.toast.show,
+                    "kind": self.toast.kind,
+                    "text": self.toast.text,
+                },
             }
             html = PAGE.replace("__CONFIG__", json.dumps(config))
-            if not self.checkbox:
+            if not self._has_checkbox:
                 html = html.replace('<div id="input-checkbox"', '<div id="not-the-checkbox"')
             return HTMLResponse(html)
 
@@ -210,23 +275,17 @@ class FakeDemo:
 
         @app.get("/arcaptcha/api/puzzles/{challenge_id}/undefined/{part}")
         async def puzzle_image(challenge_id: str, part: str) -> Response:
-            self.image_requests.append(f"{challenge_id}/{part}")
-            if self.broken_puzzle_images:
+            if self._images_missing:
                 return Response(status_code=404)
-            png = PIECE_PNG if part == "piece" else BACKGROUND_PNG
-            if self.puzzle is not None:
-                png = self.puzzle[1] if part == "piece" else self.puzzle[0]
+            png = self._puzzle.piece if part == "piece" else self._puzzle.background
             return Response(png, media_type="image/png")
 
         @app.post("/arcaptcha/api/answer")
         async def answer(request: Request) -> Response:
             body = await request.json()
             self.answer_requests.append(body)
-            if self.target is not None:
-                right = body.get("answer") == self.target
-                reply = Reply(json={"status": "OK", "success": right})
-                return await self._respond(reply, obfuscate=True)
-            reply = self.answers[min(len(self.answer_requests), len(self.answers)) - 1]
+            accepted = self._target is not None and body.get("answer") == self._target
+            reply = Reply(json={"status": "OK", "success": accepted})
             return await self._respond(reply, obfuscate=True)
 
         return app

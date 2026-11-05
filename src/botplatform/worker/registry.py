@@ -9,20 +9,22 @@ from botplatform.contract import Bot
 from botplatform.db import BotRecord
 
 
-def validate(bots: list[type[Bot]]) -> None:
+def validate(bots: list[Bot]) -> None:
     seen: set[str] = set()
     for bot in bots:
         for attribute in ("id", "name", "modes"):
             if not getattr(bot, attribute, None):
-                raise ValueError(f"{bot.__name__} must define a non-empty `{attribute}`")
+                raise ValueError(
+                    f"{type(bot).__name__} '{bot.id}' must define a non-empty `{attribute}`"
+                )
         if bot.id in seen:
             raise ValueError(f"Duplicate bot id: {bot.id}")
         if len(set(bot.modes)) != len(bot.modes):
-            raise ValueError(f"{bot.__name__} declares a mode twice: {bot.modes}")
+            raise ValueError(f"{bot.id} declares a mode twice: {bot.modes}")
         seen.add(bot.id)
 
 
-def publish(session: Session, bots: list[type[Bot]]) -> None:
+def publish(session: Session, bots: list[Bot]) -> None:
     """Upsert every registered bot, and mark the rest inactive.
 
     Removed bots keep their last `position`, so they stay in place in the history.

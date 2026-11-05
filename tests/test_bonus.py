@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy.orm import sessionmaker
 
-from botplatform.db import Base, BotRecord, Run, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunEvent, session_factory
 from botplatform.stats import wilson_interval
 from botplatform.web.app import app
 
@@ -46,12 +46,8 @@ def seed_run(
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    sessions = session_factory()
-    Base.metadata.create_all(sessions.kw["bind"])
-    with sessions.begin() as session:
-        session.execute(delete(Run))
-        session.execute(delete(BotRecord))
+def client(clean_db: sessionmaker) -> Iterator[TestClient]:
+    with clean_db.begin() as session:
         for bot in ("arcaptcha", "arcaptcha-no-cdc"):
             session.add(BotRecord(id=bot, name=bot, modes=["headless", "headful"]))
     with TestClient(app) as test_client:

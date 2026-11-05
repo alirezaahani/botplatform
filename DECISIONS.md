@@ -81,13 +81,14 @@ Each bot implements one Python method and owns its browser. An optional helper c
 
 ### 2b. Registration: an explicit list
 
-Bots are registered by adding them to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
+Bots are registered by adding an instance to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
 
 **Why:**
 
 - The whole mechanism is readable in one place, with no import side effects.
 - A broken bot fails at worker startup with a normal traceback instead of quietly disappearing.
 - The list is in the `bots` package, so adding a bot does not touch the platform core.
+- Bots are instances, not classes, so one class plus a spec (`BotSpec` for ARCaptcha) covers every variant: no `type()` factories or `ClassVar` tricks.
 
 **Rejected:**
 
@@ -137,7 +138,7 @@ The platform owns `queued`, `running`, `success`, `blocked`, `failed`, `timeout`
 
 **Why:** the core stays free of ARCaptcha concepts, and a new bot can add reasons without changing it.
 
-**What counts as `success`:** the login response is HTTP 200, the toast has the success style, and the toast text contains the response's `msg`. Anything else is `verification_failed`. This has been seen on the live site: every assisted run (7) and every solver run (46) that reached login returned HTTP 200 with the success toast and the matching `msg`.
+**What counts as `success`:** the login response is HTTP 200, the toast has the success style, and the toast text contains the response's `msg`. Anything else is `verification_failed`. This has been seen on the live site: every assisted run (7, a bot since removed) and every solver run (46) that reached login returned HTTP 200 with the success toast and the matching `msg`.
 
 **Rejected:** a single flat list, because each new bot's failure type would mean editing the core.
 
@@ -310,7 +311,7 @@ A fake server returns any outcome on demand, and a separate command runs against
 
 **Why:** the required failures are repeatable without relying on ARCaptcha or the IP, while real selectors and network capture still get exercised. The live command catches drift between the fake page and the real site.
 
-The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(url=..., timeouts=StepTimeouts(...))`. The production worker still calls `ArcaptchaBot()` with the defaults.
+The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(BASELINE_SPEC, url=..., timeouts=StepTimeouts(...))`. The production worker runs the registered `BASELINE_BOT`, which has the defaults.
 
 **Result:** step 3 ran 50 tests (bot tests against the fake, plus codec and mode tests) in 92.2s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
 
@@ -449,27 +450,13 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Not verified:** nothing has run against demo.arcaptcha.co, so we do not know that either profile lowers the block rate. The init script removes the properties from the page's `window`; we have not checked that the site reads no other trace of chromedriver (for example on `document`). The batch end-to-end test uses a stand-in worker that finishes runs in the database, not Chrome. The report page has only been tested against seeded runs.
 
-#### Bonus (c): the assisted bot
+#### Bonus (c): the assisted bot (removed)
 
-**What:** `arcaptcha-assisted` (headful only, profile `all-signals`) is a diagnostic where a person does the solving. It ticks the checkbox as usual. If the first answer is `puzzle`, it records a `waiting_for_person` event and waits up to 130 s while the person solves the slider in the live viewer. Every `answer` request and response is recorded in an `answer_request` event, and every new `create` (a rejected answer brings a new puzzle with a new `challenge_id`) goes through the normal recording. When an `answer` arrives and no new `create` follows within 3 s, the puzzle counts as finished, and the existing login and verification run unchanged. The `answer` capture is on for every bot, because it only records requests that happen and changes nothing else.
-
-**Why:** the profiles get a `puzzle` in 21 of 21 live runs, but nothing solves the slider. Before building a solver we want to know whether the site accepts a correct answer from this browser, and we have never seen a decoded `answer`. The login is the judge: the bot never reads the answer body to decide anything.
-
-**Numbers:** 130 s leaves room in the 180 s run limit for the page load (about 8 s) and the login (about 10 s), so the global limit is unchanged. The 3 s is a guess at how long a rejected answer takes to bring a new puzzle.
-
-**Status:** a verified login after a solved puzzle is `success` with the reason `human_solved`. A failed login or toast mismatch is `failed`/`verification_failed` as before, and the answer events hold the evidence. `block`, `question`, `2fa` and every other answer type end exactly as for the normal bot. If nobody answers within 130 s, the run ends `timeout`/`human_wait_expired` and does not try the login. **Why:** that is what every other step timeout before the login does, so it stays consistent.
-
-**A `human_solved` success is never a bot success.** The reason separates it, and a run someone watched has a `viewer_connected` event, so the report leaves it out of the rates.
-
-**Lease:** the worker process renews the lease from its own loop while the child waits, whatever the bot does (`test_the_lease_is_renewed_while_the_child_runs`), so a 130 s wait is no different from any slow step.
-
-**Cost we accept:** one more bot in the list, and a run that holds the worker for up to 130 s.
-
-**Not verified:** nothing has run on the live site. The real `answer` body format is unknown (the fake uses a made-up one), the 3 s rule is a guess the live experiment will check, and we have not run the Chrome-and-viewer path with a real person.
+The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-probe`) were removed in the bots refactor because the solver bots replaced them. Their findings stay in `evidence/` and in git history.
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `Scenario._run_solver`. Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
@@ -521,6 +508,8 @@ Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv
 **Headless:** the same 2x2 was then run in headless mode with the `all-signals-headless` profile: another 40 of 40 `success` / `solved`, all on attempt 1 (medians 14.7 to 16.3 s). See `evidence/solver/results-headless-2x2.md` and `runs-headless.json`. Together that is 80 of 80 runs.
 
 **What the comparison can and cannot say:** both finders are accepted by the site, so the silhouette method is a valid independent second method. Neither finder nor movement shape changed acceptance. With no failures in 40 runs per mode, the true failure rate is only bounded (probably below about 7% per mode, about 4% over all 80), and the four bots cannot be ranked. One IP and one evening for both modes: another IP or time of day may differ. The fake demo checks only that the answer equals a known target for one fixture.
+
+**Reaction to a challenge is a strategy.** A bot's reaction to a challenge is a strategy object (`Challenge`) on its spec, so a bot for another challenge type is a new class, not a flag. The default, `GiveUp`, ends the run as `blocked` / `challenge_unsolved`.
 
 ## Platform support
 

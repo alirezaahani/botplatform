@@ -1,347 +1,239 @@
-"""The ARCaptcha bot: real Selenium and real Chrome against the local fake demo site."""
+"""The ARCaptcha bot's run: real Selenium and Chrome against the local fake demo site.
+
+Only what needs a real browser is tested here. The decisions made from what the browser saw
+(which `create` types block, which login responses are confirmed) are tested without Chrome in
+`test_verdicts.py`.
+"""
 
 import socket
+from contextlib import contextmanager
 from dataclasses import replace
 
 import pytest
 from selenium.webdriver.common.by import By
 
-from botplatform.bots import arcaptcha
-from botplatform.bots.arcaptcha import ArcaptchaBot, Scenario, redact
+from botplatform.bots.arcaptcha import BASELINE_BOT, BASELINE_SPEC, ArcaptchaBot, core
+from botplatform.bots.arcaptcha.flow import run_flow
+from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.selenium_support import chrome
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
-from tests.fake_demo.server import CHALLENGE_ID, Reply, create_reply
+from tests.fake_demo.server import CHALLENGE_ID, Reply, Toast, create_reply
 
-BLOCKED_LOGIN = Reply(status=400, json={"msg": "Please solve captcha"})
-# Starting Chrome takes a few seconds, so a timeout test allows for it on top of the step time.
-CHROME_START = 12
+LOGIN_OK = Reply(status=200, json={"msg": "You are logged in successfully!"})
+LOGIN_REFUSED = Reply(status=400, json={"msg": "Please solve captcha"})
+# A step that is meant to time out only needs a moment, and the test waits for all of it.
+QUICK = replace(FAST, load_page=1, find_checkbox=1, create_response=1, login_response=1)
+# For tests where waiting out a timeout would be the bug: the run must end long before it.
+PATIENT = replace(FAST, create_response=30, login_response=30)
+FAR_BEFORE_THE_TIMEOUT = 20  # seconds, including Chrome's start
 
 
-def assert_login_attempted(fake):
-    assert len(fake.logins) == 1
-
-
-# -- Main workflow ------------------------------------------------------------------------------
+# -- A login that works -------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("captcha_type", ["accept", "cookie"])
-def test_accepted_checkbox_then_confirmed_login_succeeds(fake, run_bot, captcha_type):
+def test_an_accepted_checkbox_then_a_confirmed_login_succeeds(fake, run_bot, captcha_type):
     fake.creates = [create_reply(captcha_type)]
     outcome = run_bot()
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.SUCCESS, None)
+    assert outcome.verdict == (Status.SUCCESS, None)
     assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
+    # The login carries the challenge ID the site gave us.
     assert fake.logins == [
         {"username": USERNAME, "password": PASSWORD, "captcha_token": CHALLENGE_ID}
     ]
-    assert outcome.ctx.one("login_response")["http_status"] == 200
-    assert outcome.ctx.one("toast")["kind"] == "success"
 
 
-def test_softban_with_confirmed_login_succeeds(fake, run_bot):
-    fake.creates = [create_reply("cookie", softban=True, message="You are softbanned")]
+def test_the_latest_of_two_create_responses_is_the_one_the_login_uses(fake, run_bot):
+    first, second = "1" * 30, "2" * 30
+    fake.creates = [create_reply("accept", first), create_reply("accept", second)]
+    fake.send_second_create()
     outcome = run_bot()
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.SUCCESS, None)
-    assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
-    # The bot keeps no softban-specific data. Only the create response's type is recorded.
-    assert outcome.ctx.one("create_response")["captcha_type"] == "cookie"
-
-
-def test_softban_with_rejected_login_fails_verification(fake, run_bot):
-    fake.creates = [create_reply("cookie", softban=True, message="You are softbanned")]
-    fake.login = BLOCKED_LOGIN
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.FAILED, "verification_failed")
-    assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
-
-
-# -- Blocking -----------------------------------------------------------------------------------
-
-
-def test_block_with_id_records_the_id_and_still_logs_in(fake, run_bot):
-    fake.creates = [create_reply("block")]
-    fake.login = BLOCKED_LOGIN
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
-    assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
-    after = outcome.ctx.one("widget_challenge_id_after_click")
-    assert after["widget_value"] == {"value": None}
-    assert after["hidden_field"] == {"value": None}
-    assert_login_attempted(fake)
-    login = outcome.ctx.one("login_response")
-    assert login["http_status"] == 400
-    assert login["body"] == {"msg": "Please solve captcha"}
-
-
-def test_block_without_id(fake, run_bot):
-    fake.creates = [create_reply("block", challenge_id=None)]
-    fake.login = BLOCKED_LOGIN
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
-    assert outcome.ctx.challenge_ids == []
-    assert_login_attempted(fake)
-
-
-def test_successful_login_never_upgrades_a_block(fake, run_bot):
-    fake.creates = [create_reply("block")]
-    outcome = run_bot()  # the fake's login defaults to 200 with a green toast
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
-    assert outcome.ctx.one("login_response")["http_status"] == 200
-
-
-@pytest.mark.parametrize("captcha_type", ["puzzle", "question", "2fa"])
-def test_challenges_are_blocked_as_unsolved(fake, run_bot, captcha_type):
-    fake.creates = [create_reply(captcha_type)]
-    fake.login = BLOCKED_LOGIN
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "challenge_unsolved")
-    assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
-    assert_login_attempted(fake)
-
-
-# -- Missing challenge_id -----------------------------------------------------------------------
-
-
-def test_accept_without_id_fails(fake, run_bot):
-    fake.creates = [create_reply("accept", challenge_id=None)]
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (
-        Status.FAILED,
-        "missing_challenge_id",
-    )
-    assert outcome.ctx.challenge_ids == []
-    assert_login_attempted(fake)
-
-
-def test_undecodable_body_fails_without_crashing(fake, run_bot):
-    fake.creates = [Reply(raw=b"this is not a captcha body at all")]
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (
-        Status.FAILED,
-        "missing_challenge_id",
-    )
-    assert outcome.ctx.one("create_response")["decode_error"] == "ValueError"
-
-
-def test_http_500_from_create_fails(fake, run_bot):
-    fake.creates = [Reply(status=500, json={"message": "boom"})]
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (
-        Status.FAILED,
-        "missing_challenge_id",
-    )
-    assert outcome.ctx.one("create_response")["http_status"] == 500
-
-
-def test_http_422_from_create_fails_and_records_the_alert(fake, run_bot):
-    fake.creates = [Reply(status=422, json={"message": "Invalid site key"})]
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (
-        Status.FAILED,
-        "missing_challenge_id",
-    )
-    assert outcome.ctx.of("alert") == [{"text": "Invalid site key"}]
-
-
-# -- Verification -------------------------------------------------------------------------------
+    assert outcome.ctx.challenge_ids == [first, second]
+    assert fake.logins[0]["captcha_token"] == second
+    assert outcome.verdict == (Status.SUCCESS, None)
 
 
 @pytest.mark.parametrize(
-    ("login", "toast"),
-    [
-        (Reply(status=401, json={"msg": "Wrong password"}), {}),
-        (Reply(status=401, json={"msg": "You are logged in successfully!"}), {"kind": "success"}),
-        (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"kind": "error"}),
-        (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"text": "Other"}),
-        (Reply(status=200, json={}), {}),
-        (Reply(status=200, json={"msg": "You are logged in successfully!"}), {"none": True}),
-    ],
-    ids=["401-red", "401-green", "200-red", "200-different-text", "200-no-msg", "200-no-toast"],
+    ("login", "verdict"),
+    [(LOGIN_OK, (Status.SUCCESS, None)), (LOGIN_REFUSED, (Status.FAILED, "verification_failed"))],
+    ids=["login-confirmed", "login-refused"],
 )
-def test_login_not_confirmed_by_both_signals_fails(fake, run_bot, login, toast):
+def test_a_softban_is_judged_by_the_login_alone(fake, run_bot, login, verdict):
+    fake.creates = [create_reply("cookie", softban=True, message="You are softbanned")]
     fake.login = login
-    fake.toast = {"none": False, "kind": None, "text": None} | toast
+
+    assert run_bot().verdict == verdict
+
+
+# -- What the page shows after the login --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("toast", "seen"),
+    [(Toast(kind="error"), "error"), (Toast(show=False), "none")],
+    ids=["red-toast-on-a-200", "no-toast"],
+)
+def test_a_login_the_page_does_not_confirm_fails_verification(fake, run_bot, toast, seen):
+    fake.toast = toast
     outcome = run_bot()
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.FAILED, "verification_failed")
+    assert outcome.verdict == (Status.FAILED, "verification_failed")
+    assert outcome.ctx.one("toast")["kind"] == seen
+
+
+# -- A block, or a challenge nobody solves ------------------------------------------------------
+
+
+@pytest.mark.parametrize("login", [LOGIN_REFUSED, LOGIN_OK], ids=["login-refused", "login-ok"])
+def test_a_block_still_logs_in_and_a_good_login_never_upgrades_it(fake, run_bot, login):
+    fake.creates = [create_reply("block")]
+    fake.login = login
+    outcome = run_bot()
+
+    assert outcome.verdict == (Status.BLOCKED, "captcha_blocked")
     assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
+    assert len(fake.logins) == 1
+    # A blocked widget never stores the challenge ID, and the bot records that it saw none.
+    assert outcome.ctx.one("widget_challenge_id_after_click")["hidden_field"] == {"value": None}
 
 
-def test_missing_toast_is_recorded_as_none(fake, run_bot):
-    fake.toast = {"none": True, "kind": None, "text": None}
+def test_a_puzzle_no_one_solves_ends_blocked_but_still_tries_the_login(fake, run_bot):
+    fake.creates = [create_reply("puzzle")]
+    fake.login = LOGIN_REFUSED
     outcome = run_bot()
 
-    assert outcome.ctx.one("toast") == {"kind": "none", "text": ""}
-    assert "none" in outcome.result.error
+    assert outcome.verdict == (Status.BLOCKED, "challenge_unsolved")
+    assert len(fake.logins) == 1
+
+
+# -- Replies the bot cannot use -----------------------------------------------------------------
+
+
+def test_a_create_body_nobody_can_decode_fails_without_crashing(fake, run_bot):
+    fake.creates = [Reply(raw=b"this is not a captcha body at all")]
+    outcome = run_bot()
+
+    assert outcome.verdict == (Status.FAILED, "missing_challenge_id")
+    assert outcome.ctx.one("create_response")["decode_error"] == "ValueError"
+
+
+def test_an_alert_from_the_page_is_recorded_and_the_run_goes_on(fake, run_bot):
+    fake.alert_on_click("Hello from the page")
+    outcome = run_bot()
+
+    assert outcome.ctx.of("alert") == [{"text": "Hello from the page"}]
+    assert outcome.verdict == (Status.SUCCESS, None)
+
+
+def test_a_rejected_create_that_alerts_fails_the_run_and_records_the_alert(fake, run_bot):
+    fake.creates = [Reply(status=422, json={"message": "Invalid site key"})]
+    outcome = run_bot()
+
+    assert outcome.ctx.of("alert") == [{"text": "Invalid site key"}]
+    assert outcome.verdict == (Status.FAILED, "missing_challenge_id")
+
+
+def test_a_cors_preflight_is_not_counted_as_a_create_request(fake, run_bot):
+    outcome = run_bot()
+
+    requests = outcome.ctx.one("create_requests")
+    assert [r["method"] for r in requests["not_counted"]] == ["OPTIONS"]
+    assert requests["post_requests_started"] == requests["responses"] == fake.create_requests == 1
+    assert requests["failed"] == 0
 
 
 # -- Timeouts -----------------------------------------------------------------------------------
 
 
-def assert_timeout(outcome, step, seconds):
-    assert (outcome.result.status, outcome.result.reason) == (Status.TIMEOUT, step)
-    assert outcome.seconds < seconds + CHROME_START, f"took {outcome.seconds:.1f}s"
+@pytest.mark.parametrize(
+    ("break_the_site", "step"),
+    [
+        (lambda fake: fake.hang_page(), "load_page"),
+        (lambda fake: fake.remove_checkbox(), "find_checkbox"),
+        (lambda fake: setattr(fake, "creates", [Reply(action="hang")]), "create_response"),
+        (lambda fake: setattr(fake, "login", Reply(action="hang")), "login_response"),
+    ],
+    ids=["page", "checkbox", "create", "login"],
+)
+def test_a_step_that_never_finishes_times_out_with_its_name(fake, run_bot, break_the_site, step):
+    break_the_site(fake)
+    outcome = run_bot(timeouts=QUICK)
+
+    assert outcome.verdict == (Status.TIMEOUT, step)
+    # The login is only tried when the page and the checkbox worked.
+    assert bool(fake.logins) == (step == "login_response")
 
 
-def test_page_load_hang(fake, run_bot):
-    fake.page = Reply(action="hang")
-    outcome = run_bot()
-
-    assert_timeout(outcome, "load_page", FAST.load_page)
-    assert fake.logins == []
-
-
-def test_checkbox_missing(fake, run_bot):
-    fake.checkbox = False
-    outcome = run_bot()
-
-    assert_timeout(outcome, "find_checkbox", FAST.find_checkbox)
-    assert fake.logins == []
-
-
-def test_create_hang(fake, run_bot):
-    fake.creates = [Reply(action="hang")]
-    outcome = run_bot()
-
-    assert_timeout(outcome, "create_response", FAST.create_response)
-    assert outcome.ctx.of("checkbox_clicked")
-    assert fake.logins == []
-
-
-def test_create_connection_dropped_is_an_error_straight_away(fake, run_bot):
-    fake.creates = [Reply(action="drop", json={"status": "OK", "captcha_type": "accept"})]
-    # A long create timeout, so a regression to waiting it out fails the time check.
-    slow = replace(FAST, create_response=30)
-    outcome = run_bot(timeouts=slow)
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "create_request_failed")
-    requests = outcome.ctx.one("create_requests")
-    assert requests["failed"] == 1
-    assert requests["responses"] == 0
-    assert outcome.seconds < CHROME_START + FAST.more_create_responses + 5
-    assert_login_attempted(fake)  # decision 3b: a classified failure still logs in
-
-
-def test_create_api_origin_refuses_connections(fake, run_bot):
-    fake.stop_api()
-    outcome = run_bot()
-
-    # Chrome still logs the POST, and then logs it as failed, so this ends like a dropped reply.
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "create_request_failed")
-    requests = outcome.ctx.one("create_requests")
-    assert (requests["failed"], requests["responses"]) == (1, 0)
-    assert outcome.seconds < CHROME_START + FAST.create_response
-    assert_login_attempted(fake)
-
-
-def test_login_response_hang(fake, run_bot):
-    fake.login = Reply(action="hang")
-    outcome = run_bot()
-
-    assert_timeout(outcome, "login_response", FAST.create_response + FAST.login_response)
-    assert outcome.ctx.challenge_ids == [CHALLENGE_ID]
-
-
-def test_blocked_run_whose_login_hangs_stays_blocked(fake, run_bot):
+def test_a_blocked_run_whose_login_hangs_stays_blocked(fake, run_bot):
     fake.creates = [create_reply("block")]
     fake.login = Reply(action="hang")
-    outcome = run_bot()
+    outcome = run_bot(timeouts=QUICK)
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
+    assert outcome.verdict == (Status.BLOCKED, "captcha_blocked")
     assert outcome.ctx.one("login_timeout") == {"step": "login_response"}
 
 
-def test_login_connection_dropped_is_an_error(fake, run_bot):
-    fake.login = Reply(action="drop", json={"msg": "You are logged in successfully!"})
-    outcome = run_bot()
+# -- Broken connections end the run at once, not at the timeout ---------------------------------
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "login_request_failed")
+
+@pytest.mark.parametrize(
+    "break_create",
+    [
+        lambda fake: setattr(fake, "creates", [Reply(action="drop", json={"status": "OK"})]),
+        lambda fake: fake.stop_api(),
+    ],
+    ids=["reply-cut-off", "origin-refuses"],
+)
+def test_a_failed_create_request_is_an_error_straight_away(fake, run_bot, break_create):
+    break_create(fake)
+    outcome = run_bot(timeouts=PATIENT)
+
+    assert outcome.verdict == (Status.ERROR, "create_request_failed")
+    requests = outcome.ctx.one("create_requests")
+    assert (requests["failed"], requests["responses"]) == (1, 0)
+    assert outcome.seconds < FAR_BEFORE_THE_TIMEOUT
+    assert len(fake.logins) == 1  # a failure that is already classified still logs in
+
+
+@pytest.mark.parametrize(
+    ("create", "verdict"),
+    [
+        ("accept", (Status.ERROR, "login_request_failed")),
+        ("block", (Status.BLOCKED, "captcha_blocked")),  # the earlier failure stands
+    ],
+)
+def test_a_dropped_login_is_an_error_unless_the_run_already_failed(fake, run_bot, create, verdict):
+    fake.creates = [create_reply(create)]
+    fake.login = Reply(action="drop", json={"msg": "any"})
+    outcome = run_bot(timeouts=PATIENT)
+
+    assert outcome.verdict == verdict
     assert outcome.ctx.of("login_request_failed") == [{}]
-    assert outcome.seconds < CHROME_START + FAST.create_response
+    assert outcome.seconds < FAR_BEFORE_THE_TIMEOUT
 
 
-def test_blocked_run_whose_login_is_dropped_stays_blocked(fake, run_bot):
-    fake.creates = [create_reply("block")]
-    fake.login = Reply(action="drop", json={"msg": "Please solve captcha"})
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.BLOCKED, "captcha_blocked")
-    assert outcome.ctx.of("login_request_failed") == [{}]
-
-
-# -- Other errors -------------------------------------------------------------------------------
-
-
-def test_unknown_captcha_type_is_an_error(fake, run_bot):
-    fake.creates = [create_reply("hologram")]
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "unknown_captcha_type")
-    assert_login_attempted(fake)
-
-
-def test_connection_refused_is_an_error(run_bot):
+def test_a_site_that_is_down_is_an_error_with_the_reason(run_bot):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         closed_port_url = f"http://127.0.0.1:{sock.getsockname()[1]}/"
     outcome = run_bot(url=closed_port_url)
 
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "unhandled_exception")
+    assert outcome.verdict == (Status.ERROR, "unhandled_exception")
     assert "ERR_CONNECTION_REFUSED" in outcome.result.error
 
 
-def test_missing_credentials(monkeypatch):
+def test_without_credentials_the_run_is_an_error_before_any_browser_starts(monkeypatch):
     monkeypatch.delenv("ARCAPTCHA_USERNAME", raising=False)
     monkeypatch.delenv("ARCAPTCHA_PASSWORD", raising=False)
-    result = ArcaptchaBot().run(RecordingContext())
+    result = BASELINE_BOT.run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "missing_credentials")
 
 
-# -- History and robustness ---------------------------------------------------------------------
-
-
-def test_two_create_responses_are_recorded_in_network_order(fake, run_bot):
-    first, second = "1" * 30, "2" * 30
-    fake.creates = [create_reply("accept", first), create_reply("accept", second)]
-    fake.second_create = True
-    outcome = run_bot()
-
-    assert outcome.ctx.challenge_ids == [first, second]
-    assert fake.logins[0]["captcha_token"] == second
-    assert (outcome.result.status, outcome.result.reason) == (Status.SUCCESS, None)
-
-
-def test_js_alert_is_recorded_and_the_run_continues(fake, run_bot):
-    fake.alert_on_click = "Hello from the page"
-    outcome = run_bot()
-
-    assert {"text": "Hello from the page"} in outcome.ctx.of("alert")
-    assert (outcome.result.status, outcome.result.reason) == (Status.SUCCESS, None)
-
-
-def test_cors_preflight_is_not_counted(fake, run_bot):
-    outcome = run_bot()
-
-    requests = outcome.ctx.one("create_requests")
-    assert [r["method"] for r in requests["not_counted"]] == ["OPTIONS"]
-    assert requests["post_requests_started"] == 1
-    assert requests["responses"] == fake.create_requests == 1
-    assert requests["failed"] == 0
-
-
-# -- Secrets ------------------------------------------------------------------------------------
+# -- The password never leaks -------------------------------------------------------------------
 
 
 def test_screenshots_never_show_the_password(fake, credentials):
@@ -353,51 +245,45 @@ def test_screenshots_never_show_the_password(fake, credentials):
             seen.append((name, field[0].get_attribute("value") if field else "no field"))
 
         ctx = RecordingContext(on_artifact)
-        Scenario(ctx, driver, USERNAME, PASSWORD, fake.url, FAST).run()
+        run_flow(Session(ctx, driver, USERNAME, PASSWORD, fake.url, FAST))
 
-    names = [name for name, _ in seen]
-    assert "after-login.png" in names
+    assert "after-login.png" in [name for name, _ in seen]
     assert fake.logins[0]["password"] == PASSWORD  # it really was typed before the last shots
     assert all(value == "" for _, value in seen), seen
 
 
-def test_unhandled_exception_text_hides_the_password(fake, run_bot, monkeypatch):
-    def explode(self):
-        raise RuntimeError(f"cannot log in with {PASSWORD}")
-
-    monkeypatch.setattr(arcaptcha.Scenario, "_log_in", explode)
-    outcome = run_bot()
-
-    assert (outcome.result.status, outcome.result.reason) == (Status.ERROR, "unhandled_exception")
-    assert "[password]" in outcome.result.error
-    assert PASSWORD not in outcome.result.error
+@contextmanager
+def no_browser(**_):
+    yield None
 
 
-def test_redact_keeps_the_site_host_but_hides_the_password_elsewhere():
-    text = "https://demo.arcaptcha.co/ rejected demo."
-    assert redact(text, "demo", "demo.arcaptcha.co") == (
-        "https://demo.arcaptcha.co/ rejected [password]."
-    )
+@pytest.mark.parametrize(
+    ("password", "url", "failure", "host"),
+    [
+        ("s3cret", "http://127.0.0.1:8000/", "could not reach 127.0.0.1 with s3cret", "127.0.0.1"),
+        # A password that is also part of the host name: the host stays readable, nothing else.
+        (
+            "demo",
+            "https://demo.arcaptcha.co/",
+            "could not load https://demo.arcaptcha.co/ for demo",
+            "demo.arcaptcha.co",
+        ),
+    ],
+    ids=["ordinary-password", "password-inside-the-host"],
+)
+def test_an_unexpected_exception_is_reported_without_the_password(
+    monkeypatch, password, url, failure, host
+):
+    def explode(session, challenge):
+        raise RuntimeError(failure)
 
-
-def test_redact_hides_a_password_that_is_not_in_the_host():
-    text = "https://demo.arcaptcha.co/ failed for s3cret and s3cret."
-    assert redact(text, "s3cret", "demo.arcaptcha.co") == (
-        "https://demo.arcaptcha.co/ failed for [password] and [password]."
-    )
-
-
-def test_run_keeps_the_site_host_in_the_error_but_hides_the_password(monkeypatch):
-    monkeypatch.setenv("ARCAPTCHA_USERNAME", "demo")
-    monkeypatch.setenv("ARCAPTCHA_PASSWORD", "demo")
-
-    def explode(self):
-        raise RuntimeError("could not load https://demo.arcaptcha.co/ for demo")
-
-    monkeypatch.setattr(arcaptcha.Scenario, "run", explode)
-    result = ArcaptchaBot(url="https://demo.arcaptcha.co/").run(RecordingContext())
+    monkeypatch.setenv("ARCAPTCHA_USERNAME", "someone")
+    monkeypatch.setenv("ARCAPTCHA_PASSWORD", password)
+    monkeypatch.setattr(core, "chrome", no_browser)  # the failure is injected, so skip Chrome
+    monkeypatch.setattr(core, "run_flow", explode)
+    result = ArcaptchaBot(BASELINE_SPEC, url=url).run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
-    assert "https://demo.arcaptcha.co/" in result.error
-    assert "[password].arcaptcha.co" not in result.error
-    assert "for [password]" in result.error
+    assert host in result.error  # the host stays readable
+    assert "[password]" in result.error
+    assert not any(f"{word} {password}" in result.error for word in ("for", "with"))
