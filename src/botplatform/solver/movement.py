@@ -59,10 +59,10 @@ MOVERS: dict[str, Callable[[int, random.Random], Path]] = {
     "eased": eased_path,
 }
 
-# The handle's and piece's `left` right now, in px (None when missing).
 # The widget being dragged: the slider's handle and the puzzle piece it moves.
 HANDLE = "div.draggable"
 PIECE = "img.puzzle"
+# The handle's and piece's `left` right now, in px (None when missing).
 LEFTS_JS = """
 const left = (selector) => {
   const el = document.querySelector(selector);
@@ -111,13 +111,18 @@ def perform_drag(
         return do(lambda: driver.execute_script(LEFTS_JS, HANDLE, PIECE)) or {}
 
     x = y = 0
+
+    def follow(points: Path) -> None:
+        nonlocal x, y
+        for px, py, pause in points:
+            actions.move_by_offset(px - x, py - y)
+            x, y = px, py
+            actions.pause(pause)
+
     actions.move_to_element(handle).click_and_hold()
     first = next((i for i, point in enumerate(path) if point[0] > 0), None)
     head = path[: first + 1] if first is not None else path
-    for px, py, pause in head:
-        actions.move_by_offset(px - x, py - y)
-        x, y = px, py
-        actions.pause(pause)
+    follow(head)
     run()
     moved = True
     if first is not None:
@@ -130,11 +135,9 @@ def perform_drag(
     if not moved:
         actions.release()
         run()
-        return DragResult(False, lefts().get("handle"), lefts().get("piece"))
-    for px, py, pause in path[len(head) :]:
-        actions.move_by_offset(px - x, py - y)
-        x, y = px, py
-        actions.pause(pause)
+        stuck = lefts()
+        return DragResult(False, stuck.get("handle"), stuck.get("piece"))
+    follow(path[len(head) :])
     run()
     final = lefts()
     actions.release()
