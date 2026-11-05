@@ -5,7 +5,6 @@ from botplatform.bots.arcaptcha import (
     SOLVER_BOTS,
     ArcaptchaAssistedBot,
     ArcaptchaBot,
-    ArcaptchaDragProbeBot,
 )
 from botplatform.bots.example import ExampleBot
 from botplatform.contract import Bot
@@ -17,6 +16,5 @@ BOTS: list[type[Bot]] = [
     ArcaptchaBot,
     *PROFILE_BOTS,
     ArcaptchaAssistedBot,
-    ArcaptchaDragProbeBot,
     *SOLVER_BOTS,
 ]
