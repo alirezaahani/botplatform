@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketDisconnect
 
+from botplatform.contract import Status
 from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.web import live
 from botplatform.web.app import app
@@ -58,7 +59,14 @@ def client(
         live, "worker_base_url", lambda worker_id: worker_ids.append(worker_id) or upstream
     )
     with clean_db.begin() as session:
-        session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless", "headful"]))
+        session.add(
+            BotRecord(
+                id="arcaptcha",
+                name="ARCaptcha",
+                modes=["headless", "headful"],
+                watchable_modes=["headful"],
+            )
+        )
     with TestClient(app) as test_client:
         yield test_client
 
@@ -118,7 +126,7 @@ def test_websocket_closes_when_the_run_ends(
         socket.send_bytes(b"hello")
         assert socket.receive_bytes() == b"echo:hello"
         with SessionLocal.begin() as session:
-            session.get_one(Run, run_id).status = "success"
+            session.get_one(Run, run_id).status = Status.SUCCESS
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_bytes()
         assert closed.value.code == 1000

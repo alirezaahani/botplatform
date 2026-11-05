@@ -81,7 +81,7 @@ Each bot implements one Python method and owns its browser. An optional helper c
 
 ### 2b. Registration: an explicit list
 
-Bots are registered by adding an instance to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
+Bots are registered by adding an instance to the `BOTS` dict (keyed by id) in `botplatform/bots/__init__.py`.
 
 **Why:**
 
@@ -252,7 +252,7 @@ A page showing an active run reloads its status every 2 seconds and stops when t
 
 The PDF does not require a JSON API, so none is included. Batch launching is a small script, `python -m botplatform.batch`, and not a page.
 
-Each bot declares its modes as plain strings, such as `["headless", "headful"]` or `["direct"]`. The worker publishes them in the `bots` table, and the UI draws one button per mode. Web rejects a mode the bot does not declare, and the worker marks a run `error` if its bot or mode is no longer available. Modes are free-form, so the platform cannot catch a misspelled one, and each bot's test checks its declared modes. The core gives meaning to one string only: `headful` gets the "watch live" link, because the platform provides the viewer.
+Each bot declares its modes as its own `StrEnum`, such as `BrowserMode` (`headless`, `headful`) or the example bot's `direct`, and `run(ctx, mode)` receives the member. The worker publishes the values, in declared order, and the modes that can be watched live, in the `bots` table, and the UI draws one button per mode. Web rejects a mode the bot does not declare, and the worker marks a run `error` if its bot or mode is no longer available. The enum means a misspelled mode is a type error, and the core names no mode: a run gets the "watch live" link only if its mode is in the bot's published `watchable_modes` (`SeleniumBot` sets `headful`), because the platform provides the viewer.
 
 **Why:** the platform does not assume every bot is a browser, so a new kind of bot needs no core change and the history records what actually happened. One-click buttons also make the mode explicit on every launch, with no default to forget about.
 

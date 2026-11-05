@@ -12,6 +12,7 @@ import pytest
 from selenium.common.exceptions import WebDriverException
 
 from botplatform.bots.arcaptcha import BASELINE_BOT
+from botplatform.bots.utils.browser import BrowserMode
 from botplatform.bots.utils.profiles import BASELINE, STEALTH_FLAGS
 from botplatform.contract import Status
 from tests.bots.arcaptcha.conftest import FAST, PASSWORD, USERNAME
@@ -229,7 +230,7 @@ def test_a_site_that_is_down_raises_with_the_reason(run_bot):
 def test_without_credentials_the_run_is_an_error_before_any_browser_starts(monkeypatch):
     monkeypatch.delenv("ARCAPTCHA_USERNAME", raising=False)
     monkeypatch.delenv("ARCAPTCHA_PASSWORD", raising=False)
-    result = BASELINE_BOT.run(RecordingContext())
+    result = BASELINE_BOT.run(RecordingContext(), BrowserMode.HEADLESS)
 
     assert (result.status, result.reason) == (Status.ERROR, "missing_credentials")
 

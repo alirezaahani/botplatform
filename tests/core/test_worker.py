@@ -8,6 +8,7 @@ import textwrap
 import threading
 import time
 import uuid
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -164,11 +165,14 @@ def test_sigterm_kills_the_child_and_marks_the_run_worker_stopped(
 def test_an_exception_raised_by_a_bot_becomes_an_unhandled_exception_result(
     db: sessionmaker, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class Exploding(Bot):
-        def run(self, ctx: Any) -> BotResult:
+    class Mode(StrEnum):
+        HEADLESS = "headless"
+
+    class Exploding(Bot[Mode]):
+        def run(self, ctx: Any, mode: Mode) -> BotResult:
             raise RuntimeError("it broke")
 
-    monkeypatch.setattr(child, "BOTS", [Exploding("arcaptcha", "x", modes=("headless",))])
+    monkeypatch.setattr(child, "BOTS", {"arcaptcha": Exploding("arcaptcha", "x", modes=Mode)})
     result = child.execute(claimed_run(db))
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")

@@ -1,6 +1,6 @@
 """Capturing the puzzle's images and geometry."""
 
-from typing import Any
+from pydantic import BaseModel, ConfigDict
 
 from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session
 from botplatform.bots.utils.browser import describe, wait_for
@@ -43,6 +43,27 @@ return {
 """
 
 
+# Only the fields we read are required. The rest of the script's result is kept (`extra="allow"`)
+# so the `puzzle_captured` event still records it.
+class Image(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    src: str
+
+
+class Piece(Image):
+    style_top: str
+
+
+class PuzzleInfo(BaseModel):
+    """What `PUZZLE_INFO_JS` returns once a puzzle is on screen."""
+
+    model_config = ConfigDict(extra="allow")
+
+    background: Image
+    piece: Piece
+
+
 def capture_puzzle(
     session: Session,
     challenge_id: str | None,
@@ -60,13 +81,15 @@ def capture_puzzle(
         session.puzzles += 1
         n = session.puzzles
     try:
-        info = wait_for(
-            session,
-            lambda: driver.execute_script(PUZZLE_INFO_JS, session.puzzle_srcs),
-            session.timeouts.puzzle_images if seconds is None else seconds,
-            "puzzle_images",
+        info = PuzzleInfo.model_validate(
+            wait_for(
+                session,
+                lambda: driver.execute_script(PUZZLE_INFO_JS, session.puzzle_srcs),
+                session.timeouts.puzzle_images if seconds is None else seconds,
+                "puzzle_images",
+            )
         )
-        srcs = [info["background"]["src"], info["piece"]["src"]]
+        srcs = [info.background.src, info.piece.src]
         session.puzzle_srcs.extend(srcs)
         background, piece = fetch_in_page(session, srcs)
         saved = {
@@ -74,10 +97,11 @@ def capture_puzzle(
             for part, file in (("background", background), ("piece", piece))
         }
         session.capture = CapturedPuzzle(
-            n, challenge_id, background.data, piece.data, pixels(info["piece"])
+            n, challenge_id, background.data, piece.data, pixels(info.piece)
         )
         ctx.event(
-            "puzzle_captured", {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info}
+            "puzzle_captured",
+            {"challenge_id": challenge_id, "n": n, "artifacts": saved, **info.model_dump()},
         )
     except Exception as error:  # noqa: BLE001 - a missing capture must not change the result
         ctx.event(
@@ -86,9 +110,9 @@ def capture_puzzle(
         )
 
 
-def pixels(piece: dict[str, Any]) -> int | None:
+def pixels(piece: Piece) -> int | None:
     """The piece's inline `top` (like '60px') as a number, or None."""
     try:
-        return round(float(str(piece.get("style_top", "")).removesuffix("px")))
+        return round(float(piece.style_top.removesuffix("px")))
     except ValueError:
         return None

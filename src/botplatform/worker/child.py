@@ -16,10 +16,9 @@ from botplatform.worker.queue import finish
 class DatabaseRunContext:
     """The `RunContext` given to bots. Each call commits, so it survives a kill or crash."""
 
-    def __init__(self, run_id: uuid.UUID, mode: str) -> None:
+    def __init__(self, run_id: uuid.UUID) -> None:
         self._run_id = run_id
         self.run_id = str(run_id)
-        self.mode = mode
 
     def record_challenge_id(self, value: str) -> None:
         with SessionLocal.begin() as session:
@@ -40,16 +39,18 @@ class DatabaseRunContext:
 def execute(run_id: uuid.UUID) -> BotResult:
     with SessionLocal() as session:
         run = session.get_one(Run, run_id)
-        bot_id, mode = run.bot_id, run.mode
+        bot_id, mode_name = run.bot_id, run.mode
 
-    bot = next((bot for bot in BOTS if bot.id == bot_id), None)
+    bot = BOTS.get(bot_id)
     if bot is None:
         return BotResult(Status.ERROR, "bot_unavailable", f"This worker has no bot '{bot_id}'")
-    if mode not in bot.modes:
-        return BotResult(Status.ERROR, "mode_unavailable", f"'{bot_id}' has no mode '{mode}'")
+    try:
+        mode = bot.modes(mode_name)
+    except ValueError:
+        return BotResult(Status.ERROR, "mode_unavailable", f"'{bot_id}' has no mode '{mode_name}'")
 
     try:
-        return bot.run(DatabaseRunContext(run_id, mode))
+        return bot.run(DatabaseRunContext(run_id), mode)
     except Exception:  # noqa: BLE001 - any bot failure becomes an error result
         return BotResult(Status.ERROR, "unhandled_exception", traceback.format_exc())
 

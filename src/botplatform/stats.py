@@ -11,8 +11,6 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
     """
     if total <= 0:
         return None
-    if not 0 <= successes <= total:
-        raise ValueError(f"successes must be between 0 and {total}, got {successes}")
     p = successes / total
     z2 = z * z
     centre = (p + z2 / (2 * total)) / (1 + z2 / total)

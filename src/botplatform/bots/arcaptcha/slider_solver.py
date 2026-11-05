@@ -133,12 +133,8 @@ class SliderSolver(Challenge):
         """Drag the handle to `target`, again if it did not move. A failed drag is recorded."""
         result = None
 
-        def snapshot() -> dict[str, Any]:
-            lefts = do(
-                session,
-                lambda: session.driver.execute_script(LEFTS_JS, HANDLE, PIECE),
-            )
-            return lefts or {}
+        def snapshot() -> dict[str, float | None]:  # the script always returns both keys
+            return do(session, lambda: session.driver.execute_script(LEFTS_JS, HANDLE, PIECE))
 
         try:
             while True:
@@ -208,6 +204,6 @@ def puzzle_ready(session: Session) -> CapturedPuzzle:
         remaining = deadline - time.monotonic()
         if remaining <= 0 or session.puzzles == 0:
             raise StepTimeout("puzzle_ready")
-        challenge_id = session.creates[-1]["challenge_id"]
+        challenge_id = session.creates[-1].challenge_id
         capture_puzzle(session, challenge_id, n=session.puzzles, seconds=remaining)
     return session.capture

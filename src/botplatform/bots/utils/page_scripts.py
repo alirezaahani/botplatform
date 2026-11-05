@@ -1,8 +1,10 @@
 """JavaScript that runs in the page, and the Python that goes with it. Not tied to one site."""
 
-import base64
 import mimetypes
 from dataclasses import dataclass
+from typing import Any
+
+from pydantic import Base64Bytes, BaseModel, TypeAdapter
 
 from botplatform.bots.utils.browser import BrowserSession, describe, do
 from botplatform.contract import RunContext
@@ -81,12 +83,17 @@ Promise.all(arguments[0].map(get)).then(
 """
 
 
+SIGNALS = TypeAdapter(dict[str, Any])
+
+
 def record_browser_signals(session: BrowserSession) -> None:
     try:
-        signals = do(session, lambda: session.driver.execute_async_script(BROWSER_SIGNALS_JS))
+        signals = SIGNALS.validate_python(
+            do(session, lambda: session.driver.execute_async_script(BROWSER_SIGNALS_JS))
+        )
     except Exception as error:  # noqa: BLE001 - evidence gathering must not change the result
         signals = {"error": describe(error)}
-    session.ctx.event("browser_signals", signals if isinstance(signals, dict) else {})
+    session.ctx.event("browser_signals", signals)
 
 
 @dataclass(frozen=True)
@@ -95,15 +102,32 @@ class FetchedFile:
     content_type: str | None
 
 
+class PageFile(BaseModel):
+    b64: Base64Bytes
+    content_type: str | None
+
+
+class FetchedFiles(BaseModel):
+    files: list[PageFile]
+
+
+class FetchFailed(BaseModel):
+    error: str
+
+
+FETCH_RESULT = TypeAdapter(FetchedFiles | FetchFailed)
+
+
 def fetch_in_page(session: BrowserSession, urls: list[str]) -> list[FetchedFile]:
     """Download `urls` from inside the page, in order. Raises RuntimeError if the page fails."""
-    match do(session, lambda: session.driver.execute_async_script(FETCH_FILES_JS, urls)):
-        case {"files": list() as files}:
-            return [FetchedFile(base64.b64decode(f["b64"]), f["content_type"]) for f in files]
-        case {"error": error}:
-            raise RuntimeError(error)
-        case other:
-            raise RuntimeError(f"the page gave no result: {other!r}")
+    raw = do(session, lambda: session.driver.execute_async_script(FETCH_FILES_JS, urls))
+    try:
+        result = FETCH_RESULT.validate_python(raw)
+    except ValueError as error:  # pydantic's ValidationError
+        raise RuntimeError(f"the page gave no usable result: {error}") from error
+    if isinstance(result, FetchedFiles):
+        return [FetchedFile(f.b64, f.content_type) for f in result.files]
+    raise RuntimeError(result.error)
 
 
 def save_fetched(ctx: RunContext, stem: str, fetched: FetchedFile) -> str:

@@ -8,6 +8,7 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 
 from botplatform.bots.utils.browser import (
+    BrowserMode,
     BrowserSession,
     SeleniumBot,
     StepTimeout,
@@ -113,23 +114,11 @@ def succeed(browser: BrowserSession) -> BotResult:
     return BotResult(Status.SUCCESS)
 
 
-def test_a_mode_chrome_cannot_run_is_refused():
-    # Otherwise `headles` would quietly run headful.
-    with pytest.raises(ValueError, match="headles"):
-        ProbeBot(succeed, modes=["headless", "headles"])
-
-
-def test_a_profile_for_a_mode_the_bot_does_not_have_is_refused():
-    # Otherwise the lookup would quietly fall back to the default profile.
-    with pytest.raises(ValueError, match="headfull"):
-        ProbeBot(succeed, profile_by_mode={"headfull": STEALTH_FLAGS})
-
-
 def test_the_profile_is_picked_by_mode():
-    bot = ProbeBot(succeed, profile=BASELINE, profile_by_mode={"headless": STEALTH_FLAGS})
+    bot = ProbeBot(succeed, profile=BASELINE, profile_by_mode={BrowserMode.HEADLESS: STEALTH_FLAGS})
 
-    assert bot.profile_for("headless") is STEALTH_FLAGS
-    assert bot.profile_for("headful") is BASELINE
+    assert bot.profile_for(BrowserMode.HEADLESS) is STEALTH_FLAGS
+    assert bot.profile_for(BrowserMode.HEADFUL) is BASELINE
 
 
 def test_a_run_records_its_profile_and_returns_what_the_steps_return(local_page):
@@ -138,7 +127,7 @@ def test_a_run_records_its_profile_and_returns_what_the_steps_return(local_page)
         return BotResult(Status.FAILED, "probe_reason")
 
     ctx = RecordingContext()
-    result = ProbeBot(visit, profile=STEALTH_FLAGS).run(ctx)
+    result = ProbeBot(visit, profile=STEALTH_FLAGS).run(ctx, BrowserMode.HEADLESS)
 
     assert result == BotResult(Status.FAILED, "probe_reason")
     assert ctx.one("browser_profile") == STEALTH_FLAGS.settings()
@@ -150,7 +139,7 @@ def test_a_step_timeout_ends_the_run_as_timeout_with_a_screenshot(local_page):
         raise StepTimeout("find_thing")
 
     ctx = RecordingContext()
-    result = ProbeBot(stall).run(ctx)
+    result = ProbeBot(stall).run(ctx, BrowserMode.HEADLESS)
 
     assert (result.status, result.reason) == (Status.TIMEOUT, "find_thing")
     assert [name for name, _, _ in ctx.artifacts] == ["timeout-find_thing.png"]
@@ -163,5 +152,5 @@ def test_any_other_error_propagates_after_a_screenshot(local_page):
 
     ctx = RecordingContext()
     with pytest.raises(RuntimeError, match="boom"):
-        ProbeBot(crash).run(ctx)
+        ProbeBot(crash).run(ctx, BrowserMode.HEADLESS)
     assert [name for name, _, _ in ctx.artifacts] == ["error.png"]

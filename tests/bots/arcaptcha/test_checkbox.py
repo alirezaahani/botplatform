@@ -3,6 +3,7 @@
 import pytest
 
 from botplatform.bots.arcaptcha.checkbox import classify_create
+from botplatform.bots.arcaptcha.session import Create
 from botplatform.contract import BotResult, Status
 
 BLOCKED = BotResult(Status.BLOCKED, "captcha_blocked")
@@ -11,9 +12,9 @@ NO_ID = BotResult(Status.FAILED, "missing_challenge_id")
 UNKNOWN_TYPE = "unknown_captcha_type"
 
 
-def create(captcha_type: str | None, challenge_id: str | None = "id-1") -> dict:
+def create(captcha_type: str | None, challenge_id: str | None = "id-1") -> Create:
     """One decoded `create` answer, as the run keeps it."""
-    return {"captcha_type": captcha_type, "challenge_id": challenge_id}
+    return Create(captcha_type, challenge_id)
 
 
 def reason(result: BotResult | None) -> tuple[Status, str | None] | None:

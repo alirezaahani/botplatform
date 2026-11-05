@@ -8,6 +8,8 @@ import subprocess
 import sys
 import time
 import uuid
+from types import FrameType
+from typing import NoReturn
 
 from botplatform.bots import BOTS
 from botplatform.config import Settings
@@ -18,7 +20,7 @@ from botplatform.worker import queue, registry
 log = logging.getLogger("botplatform.worker")
 
 
-def kill_group(child: subprocess.Popen) -> None:
+def kill_group(child: subprocess.Popen[bytes]) -> None:
     """Kill the child's whole process group, which includes its browser."""
     try:
         os.killpg(child.pid, signal.SIGKILL)
@@ -82,7 +84,11 @@ def run_in_child(
 
 def stop_on_sigterm() -> None:
     """Turn SIGTERM into SystemExit, so `run_in_child` can clean up before the worker exits."""
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+    def exit_now(signum: int, frame: FrameType | None) -> NoReturn:
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, exit_now)
 
 
 def main() -> None:
@@ -92,10 +98,9 @@ def main() -> None:
     settings = Settings.model_validate({})
     worker_id = socket.gethostname()
 
-    registry.validate(BOTS)
     with SessionLocal.begin() as session:
         registry.publish(session, BOTS)
-    log.info("Worker %s published bots: %s", worker_id, [bot.id for bot in BOTS])
+    log.info("Worker %s published bots: %s", worker_id, list(BOTS))
 
     while True:
         with SessionLocal.begin() as session:
