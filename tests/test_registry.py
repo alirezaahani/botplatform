@@ -3,8 +3,9 @@
 import pytest
 
 from botplatform.bots import BOTS
+from botplatform.profiles import PROFILES
 from botplatform.worker.registry import validate
-from tests.test_order import make_bot
+from tests.conftest import stub_bot
 
 ARC = ["headless", "headful"]
 
@@ -51,18 +52,21 @@ def test_validate_accepts_the_registry():
 
 def test_validate_rejects_a_duplicate_id():
     with pytest.raises(ValueError, match="Duplicate bot id: a"):
-        validate([make_bot("a"), make_bot("a")])
+        validate([stub_bot("a"), stub_bot("a")])
 
 
-def test_validate_rejects_empty_modes():
-    bot = make_bot("a")
-    bot.modes = []
-    with pytest.raises(ValueError, match="`modes`"):
-        validate([bot])
+@pytest.mark.parametrize(
+    ("modes", "message"),
+    [((), "`modes`"), (("direct", "direct"), "mode twice")],
+    ids=["no-modes", "a-mode-twice"],
+)
+def test_validate_rejects_bad_modes(modes, message):
+    with pytest.raises(ValueError, match=message):
+        validate([stub_bot("a", modes=modes)])
 
 
-def test_validate_rejects_a_duplicate_mode():
-    bot = make_bot("a")
-    bot.modes = ["direct", "direct"]
-    with pytest.raises(ValueError, match="mode twice"):
-        validate([bot])
+def test_every_profile_has_a_bot_that_runs_with_it():
+    by_id = {bot.id: bot for bot in BOTS}
+    for name, profile in PROFILES.items():
+        bot = by_id["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
+        assert bot.profile is profile

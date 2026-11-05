@@ -10,10 +10,11 @@ import pytest
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketDisconnect
 
-from botplatform.db import Base, BotRecord, Run, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunEvent, session_factory
 from botplatform.web import live
 from botplatform.web.app import app
 from tests.fake_demo.server import _Server
@@ -44,16 +45,14 @@ def upstream() -> Iterator[str]:
 
 
 @pytest.fixture
-def client(upstream: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def client(
+    upstream: str, monkeypatch: pytest.MonkeyPatch, clean_db: sessionmaker
+) -> Iterator[TestClient]:
     seen: list[str] = []
     monkeypatch.setattr(
         live, "worker_base_url", lambda worker_id: seen.append(worker_id) or upstream
     )
-    sessions = session_factory()
-    Base.metadata.create_all(sessions.kw["bind"])
-    with sessions.begin() as session:
-        session.execute(delete(Run))
-        session.execute(delete(BotRecord))
+    with clean_db.begin() as session:
         session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless", "headful"]))
     with TestClient(app) as test_client:
         test_client.worker_ids = seen  # type: ignore[attr-defined]
