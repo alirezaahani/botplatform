@@ -6,16 +6,12 @@ Only what needs a real browser is tested here. The decisions made from what the 
 """
 
 import socket
-from contextlib import contextmanager
 from dataclasses import replace
 
 import pytest
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import WebDriverException
 
-from botplatform.bots.arcaptcha import BASELINE_BOT, BASELINE_SPEC, ArcaptchaBot, core
-from botplatform.bots.arcaptcha.flow import run_flow
-from botplatform.bots.arcaptcha.session import Session
-from botplatform.bots.selenium_support import chrome
+from botplatform.bots.arcaptcha import BASELINE_BOT
 from botplatform.contract import Status
 from tests.conftest import FAST, PASSWORD, USERNAME, RecordingContext
 from tests.fake_demo.server import CHALLENGE_ID, Reply, Toast, create_reply
@@ -43,6 +39,10 @@ def test_an_accepted_checkbox_then_a_confirmed_login_succeeds(fake, run_bot, cap
     assert fake.logins == [
         {"username": USERNAME, "password": PASSWORD, "captcha_token": CHALLENGE_ID}
     ]
+    # The recorded login holds the decoded request, password included, and the response.
+    login = outcome.ctx.one("login_request")
+    assert login["request"] == fake.logins[0]
+    assert (login["http_status"], login["response"]) == (200, LOGIN_OK.json)
 
 
 def test_the_latest_of_two_create_responses_is_the_one_the_login_uses(fake, run_bot):
@@ -117,7 +117,9 @@ def test_a_create_body_nobody_can_decode_fails_without_crashing(fake, run_bot):
     outcome = run_bot()
 
     assert outcome.verdict == (Status.FAILED, "missing_challenge_id")
-    assert outcome.ctx.one("create_response")["decode_error"] == "ValueError"
+    assert outcome.ctx.one("create_response")["decode_error"].startswith(
+        "decode failed: ValueError"
+    )
 
 
 def test_an_alert_from_the_page_is_recorded_and_the_run_goes_on(fake, run_bot):
@@ -173,7 +175,7 @@ def test_a_blocked_run_whose_login_hangs_stays_blocked(fake, run_bot):
     outcome = run_bot(timeouts=QUICK)
 
     assert outcome.verdict == (Status.BLOCKED, "captcha_blocked")
-    assert outcome.ctx.one("login_timeout") == {"step": "login_response"}
+    assert "login_response" in outcome.ctx.one("login_failed")["error"]
 
 
 # -- Broken connections end the run at once, not at the timeout ---------------------------------
@@ -215,14 +217,12 @@ def test_a_dropped_login_is_an_error_unless_the_run_already_failed(fake, run_bot
     assert outcome.seconds < FAR_BEFORE_THE_TIMEOUT
 
 
-def test_a_site_that_is_down_is_an_error_with_the_reason(run_bot):
+def test_a_site_that_is_down_raises_with_the_reason(run_bot):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         closed_port_url = f"http://127.0.0.1:{sock.getsockname()[1]}/"
-    outcome = run_bot(url=closed_port_url)
-
-    assert outcome.verdict == (Status.ERROR, "unhandled_exception")
-    assert "ERR_CONNECTION_REFUSED" in outcome.result.error
+    with pytest.raises(WebDriverException, match="ERR_CONNECTION_REFUSED"):
+        run_bot(url=closed_port_url)
 
 
 def test_without_credentials_the_run_is_an_error_before_any_browser_starts(monkeypatch):
@@ -231,59 +231,3 @@ def test_without_credentials_the_run_is_an_error_before_any_browser_starts(monke
     result = BASELINE_BOT.run(RecordingContext())
 
     assert (result.status, result.reason) == (Status.ERROR, "missing_credentials")
-
-
-# -- The password never leaks -------------------------------------------------------------------
-
-
-def test_screenshots_never_show_the_password(fake, credentials):
-    seen: list[tuple[str, str]] = []
-    with chrome(headless=True) as driver:
-
-        def on_artifact(name: str) -> None:
-            field = driver.find_elements(By.ID, "password")
-            seen.append((name, field[0].get_attribute("value") if field else "no field"))
-
-        ctx = RecordingContext(on_artifact)
-        run_flow(Session(ctx, driver, USERNAME, PASSWORD, fake.url, FAST))
-
-    assert "after-login.png" in [name for name, _ in seen]
-    assert fake.logins[0]["password"] == PASSWORD  # it really was typed before the last shots
-    assert all(value == "" for _, value in seen), seen
-
-
-@contextmanager
-def no_browser(**_):
-    yield None
-
-
-@pytest.mark.parametrize(
-    ("password", "url", "failure", "host"),
-    [
-        ("s3cret", "http://127.0.0.1:8000/", "could not reach 127.0.0.1 with s3cret", "127.0.0.1"),
-        # A password that is also part of the host name: the host stays readable, nothing else.
-        (
-            "demo",
-            "https://demo.arcaptcha.co/",
-            "could not load https://demo.arcaptcha.co/ for demo",
-            "demo.arcaptcha.co",
-        ),
-    ],
-    ids=["ordinary-password", "password-inside-the-host"],
-)
-def test_an_unexpected_exception_is_reported_without_the_password(
-    monkeypatch, password, url, failure, host
-):
-    def explode(session, challenge):
-        raise RuntimeError(failure)
-
-    monkeypatch.setenv("ARCAPTCHA_USERNAME", "someone")
-    monkeypatch.setenv("ARCAPTCHA_PASSWORD", password)
-    monkeypatch.setattr(core, "chrome", no_browser)  # the failure is injected, so skip Chrome
-    monkeypatch.setattr(core, "run_flow", explode)
-    result = ArcaptchaBot(BASELINE_SPEC, url=url).run(RecordingContext())
-
-    assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")
-    assert host in result.error  # the host stays readable
-    assert "[password]" in result.error
-    assert not any(f"{word} {password}" in result.error for word in ("for", "with"))

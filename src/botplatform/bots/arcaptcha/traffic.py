@@ -1,16 +1,12 @@
 """Network responses: reading them off the watcher, recording them and classifying `create`s."""
 
-import json
 from typing import Any
 
 from botplatform.bots.arcaptcha.codec import decode_body
 from botplatform.bots.arcaptcha.puzzle import capture_puzzle
 from botplatform.bots.arcaptcha.session import Session
-from botplatform.bots.selenium_support import CapturedResponse
+from botplatform.bots.selenium_support import CapturedResponse, describe
 from botplatform.contract import BotResult, Status
-
-CHALLENGE_TYPES = {"puzzle", "question", "2fa"}
-ACCEPTED_TYPES = {"accept", "cookie"}
 
 
 def drain(session: Session) -> bool:
@@ -21,7 +17,9 @@ def drain(session: Session) -> bool:
     seen_create = False
     for response in session.watcher.poll():
         if response.name == "login":
-            session.logins.append(response)
+            record = exchange_record(response)
+            session.logins.append(record)
+            session.ctx.event("login_request", record)
         elif response.name == "answer":
             record = exchange_record(response)
             session.answer_records.append(record)
@@ -38,20 +36,21 @@ def drain(session: Session) -> bool:
 
 
 def handle_create(session: Session, response: CapturedResponse) -> None:
+    record = exchange_record(response)
+    decoded = record["response"]
     info: dict[str, Any] = {"http_status": response.status, "captcha_type": None}
-    challenge_id = None
     if response.body is None:
         info["body_error"] = response.body_error
-    else:
-        try:
-            decoded = decode_body(response.body)
-            info["captcha_type"] = decoded.get("captcha_type")
-            challenge_id = (decoded.get("content") or {}).get("challenge_id")
-        except (ValueError, AttributeError, TypeError) as error:
-            info["decode_error"] = type(error).__name__
+    elif "response_note" in record:
+        info["decode_error"] = record["response_note"]
+    challenge_id = None
+    if isinstance(decoded, dict):
+        info["captcha_type"] = decoded.get("captcha_type")
+        content = decoded.get("content")
+        challenge_id = content.get("challenge_id") if isinstance(content, dict) else None
     if not isinstance(challenge_id, str) or not challenge_id:
         challenge_id = None
-    session.ctx.event("create_request", exchange_record(response))
+    session.ctx.event("create_request", record)
     session.creates.append({"captcha_type": info["captcha_type"], "challenge_id": challenge_id})
     info["has_challenge_id"] = challenge_id is not None
     if challenge_id:
@@ -76,8 +75,8 @@ def exchange_record(response: CapturedResponse) -> dict[str, Any]:
             record[side] = decode_body(data)
         except Exception as failure:  # noqa: BLE001 - a failed decode must not crash a run
             record[side] = None
-            record[f"{side}_note"] = f"decode failed: {type(failure).__name__}"
-            record[f"{side}_raw_length"] = len(data)
+            record[f"{side}_note"] = f"decode failed: {describe(failure)}"
+            record[f"{side}_text"] = data.decode("utf-8", errors="replace")[:500]
     return record
 
 
@@ -98,9 +97,9 @@ def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotRe
     if not any(create["challenge_id"] for create in creates):
         return BotResult(Status.FAILED, "missing_challenge_id")
     latest = seen[-1] if seen else None
-    if latest in CHALLENGE_TYPES:
+    if latest in {"puzzle", "question", "2fa"}:
         return BotResult(Status.BLOCKED, "challenge_unsolved")
-    if latest not in ACCEPTED_TYPES:
+    if latest not in {"accept", "cookie"}:
         # Never guess: a type we have not seen cannot be treated as an accepted checkbox.
         return BotResult(Status.ERROR, "unknown_captcha_type", f"captcha_type={latest!r}")
     return None
@@ -108,19 +107,3 @@ def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotRe
 
 def classify(session: Session) -> BotResult | None:
     return classify_create(session.creates, "create" in session.watcher.failed)
-
-
-def json_body(response: CapturedResponse) -> Any:
-    try:
-        return json.loads(response.body.decode("utf-8")) if response.body else None
-    except ValueError:
-        return None
-
-
-def body_text(response: CapturedResponse) -> Any:
-    if response.body is None:
-        return {"unreadable": response.body_error}
-    parsed = json_body(response)
-    if parsed is not None:
-        return parsed
-    return response.body.decode("utf-8", errors="replace")[:500]

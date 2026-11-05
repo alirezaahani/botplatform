@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketDisconnect
 
-from botplatform.db import BotRecord, Run, RunEvent, session_factory
+from botplatform.db import BotRecord, Run, RunEvent, SessionLocal
 from botplatform.web import live
 from botplatform.web.app import app
 from tests.fake_demo.server import _Server
@@ -45,24 +45,28 @@ def upstream() -> Iterator[str]:
 
 
 @pytest.fixture
+def worker_ids() -> list[str]:
+    """The worker ids the viewer asked the upstream address for, in order."""
+    return []
+
+
+@pytest.fixture
 def client(
-    upstream: str, monkeypatch: pytest.MonkeyPatch, clean_db: sessionmaker
+    upstream: str, worker_ids: list[str], monkeypatch: pytest.MonkeyPatch, clean_db: sessionmaker
 ) -> Iterator[TestClient]:
-    seen: list[str] = []
     monkeypatch.setattr(
-        live, "worker_base_url", lambda worker_id: seen.append(worker_id) or upstream
+        live, "worker_base_url", lambda worker_id: worker_ids.append(worker_id) or upstream
     )
     with clean_db.begin() as session:
         session.add(BotRecord(id="arcaptcha", name="ARCaptcha", modes=["headless", "headful"]))
     with TestClient(app) as test_client:
-        test_client.worker_ids = seen  # type: ignore[attr-defined]
         yield test_client
 
 
 def make_run(
     mode: str = "headful", status: str = "running", worker_id: str | None = "worker-1"
 ) -> uuid.UUID:
-    with session_factory().begin() as session:
+    with SessionLocal.begin() as session:
         run = Run(bot_id="arcaptcha", mode=mode, status=status, worker_id=worker_id)
         session.add(run)
         session.flush()
@@ -70,16 +74,16 @@ def make_run(
 
 
 def event_types(run_id: uuid.UUID) -> list[str]:
-    with session_factory()() as session:
+    with SessionLocal() as session:
         return list(session.scalars(select(RunEvent.type).where(RunEvent.run_id == run_id)))
 
 
-def test_static_files_come_from_the_runs_worker(client: TestClient) -> None:
+def test_static_files_come_from_the_runs_worker(client: TestClient, worker_ids: list[str]) -> None:
     run_id = make_run()
     response = client.get(f"/runs/{run_id}/live/vnc.html")
     assert response.status_code == 200
     assert "fake noVNC" in response.text
-    assert client.worker_ids == ["worker-1"]
+    assert worker_ids == ["worker-1"]
 
 
 def test_live_redirects_to_novnc_through_the_proxy(client: TestClient) -> None:
@@ -113,8 +117,8 @@ def test_websocket_closes_when_the_run_ends(
     ) as socket:
         socket.send_bytes(b"hello")
         assert socket.receive_bytes() == b"echo:hello"
-        with session_factory().begin() as session:
-            session.get(Run, run_id).status = "success"  # type: ignore[union-attr]
+        with SessionLocal.begin() as session:
+            session.get_one(Run, run_id).status = "success"
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_bytes()
         assert closed.value.code == 1000
@@ -166,20 +170,16 @@ def test_proxy_refuses_an_unknown_run(client: TestClient) -> None:
     assert client.get(f"/runs/{uuid.uuid4()}/live", follow_redirects=False).status_code == 404
 
 
-def test_a_run_id_that_is_not_a_uuid_is_a_404(client: TestClient) -> None:
+def test_an_id_that_is_not_a_uuid_is_refused(client: TestClient) -> None:
     for path in ("/runs/not-a-uuid", "/runs/not-a-uuid/live", "/runs/not-a-uuid/live/x"):
-        response = client.get(path, follow_redirects=False)
-        assert response.status_code == 404
-        assert response.json() == {"detail": "No such run"}
+        assert client.get(path, follow_redirects=False).status_code == 422
+    assert client.get("/artifacts/not-a-uuid").status_code == 422
     with (
         pytest.raises(WebSocketDisconnect) as closed,
         client.websocket_connect("/runs/not-a-uuid/live/websockify"),
     ):
         pass
     assert closed.value.code == 1008
-    response = client.get("/artifacts/not-a-uuid")
-    assert response.status_code == 404
-    assert response.json() == {"detail": "No such artifact"}
 
 
 @pytest.mark.parametrize(

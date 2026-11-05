@@ -8,11 +8,9 @@ import websockets
 from fastapi import APIRouter, HTTPException, Response, WebSocket
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
 
 from botplatform.contract import ACTIVE_STATUSES
-from botplatform.db import Run, RunEvent, session_factory
-from botplatform.web.deps import DbSession, parse_id
+from botplatform.db import Run, RunEvent, SessionLocal
 
 VIEWER_PORT = 6080
 VIEWER_RECHECK_SECONDS = 2.0
@@ -25,9 +23,10 @@ def worker_base_url(worker_id: str) -> str:
     return f"http://{worker_id}:{VIEWER_PORT}"
 
 
-def viewer_url(session: Session, run_id: uuid.UUID) -> str:
+def viewer_url(run_id: uuid.UUID) -> str:
     """The worker's viewer address for a run, or an HTTP error saying why there is none."""
-    run = session.get(Run, run_id)
+    with SessionLocal() as session:
+        run = session.get(Run, run_id)
     if run is None:
         raise HTTPException(404, "No such run")
     if run.mode != "headful":
@@ -45,18 +44,16 @@ def novnc_page(run_id: uuid.UUID) -> RedirectResponse:
 
 
 @router.get("/runs/{run_id}/live")
-def live(run_id: str, session: DbSession) -> RedirectResponse:
-    run_uuid = parse_id(run_id)
-    viewer_url(session, run_uuid)
-    return novnc_page(run_uuid)
+def live(run_id: uuid.UUID) -> RedirectResponse:
+    viewer_url(run_id)
+    return novnc_page(run_id)
 
 
 @router.get("/runs/{run_id}/live/{path:path}")
-async def live_file(run_id: str, path: str, session: DbSession) -> Response:
-    run_uuid = parse_id(run_id)
-    base = viewer_url(session, run_uuid)
+async def live_file(run_id: uuid.UUID, path: str) -> Response:
+    base = await run_in_threadpool(viewer_url, run_id)
     if not path:
-        return novnc_page(run_uuid)
+        return novnc_page(run_id)
     try:
         async with httpx.AsyncClient() as client:
             upstream = await client.get(f"{base}/{path}")
@@ -70,14 +67,12 @@ async def live_file(run_id: str, path: str, session: DbSession) -> Response:
 
 
 @router.websocket("/runs/{run_id}/live/websockify")
-async def live_socket(websocket: WebSocket, run_id: str, session: DbSession) -> None:
+async def live_socket(websocket: WebSocket, run_id: uuid.UUID) -> None:
     try:
-        run_uuid = parse_id(run_id)
-        base = viewer_url(session, run_uuid)
+        base = await run_in_threadpool(viewer_url, run_id)
     except HTTPException:
         await websocket.close(code=1008)
         return
-    session.close()  # do not hold a connection for as long as someone watches
     # noVNC asks for the `binary` subprotocol, and websockify only answers if we repeat it.
     protocols = websocket.scope.get("subprotocols", [])
     try:
@@ -87,20 +82,20 @@ async def live_socket(websocket: WebSocket, run_id: str, session: DbSession) -> 
             max_size=None,
         ) as upstream:
             await websocket.accept(subprotocol=upstream.subprotocol)
-            await run_in_threadpool(record_viewer, run_uuid)
-            await pump(websocket, upstream, run_uuid)
+            await run_in_threadpool(record_viewer, run_id)
+            await pump(websocket, upstream, run_id)
     except (OSError, websockets.WebSocketException):
         await websocket.close(code=1011)
 
 
 def record_viewer(run_id: uuid.UUID) -> None:
     """Note on the run that someone could take part, for the warning on its page."""
-    with session_factory().begin() as session:
+    with SessionLocal.begin() as session:
         session.add(RunEvent(run_id=run_id, type="viewer_connected"))
 
 
 def run_is_active(run_id: uuid.UUID) -> bool:
-    with session_factory()() as session:
+    with SessionLocal() as session:
         run = session.get(Run, run_id)
         return run is not None and run.status in ACTIVE_STATUSES
 

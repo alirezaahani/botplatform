@@ -3,6 +3,7 @@
 import pytest
 
 from botplatform.bots import BOTS
+from botplatform.bots.arcaptcha import ArcaptchaBot
 from botplatform.profiles import PROFILES
 from botplatform.worker.registry import validate
 from tests.conftest import stub_bot
@@ -69,6 +70,7 @@ def test_every_profile_has_a_bot_that_runs_with_it():
     by_id = {bot.id: bot for bot in BOTS}
     for name, profile in PROFILES.items():
         bot = by_id["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
+        assert isinstance(bot, ArcaptchaBot)
         assert bot.spec.profile is profile
 
 

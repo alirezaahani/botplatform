@@ -9,18 +9,13 @@ import sys
 import time
 import uuid
 
-from sqlalchemy.orm import sessionmaker
-
 from botplatform.bots import BOTS
 from botplatform.config import Settings
 from botplatform.contract import Status
-from botplatform.db import session_factory
+from botplatform.db import SessionLocal
 from botplatform.worker import queue, registry
 
 log = logging.getLogger("botplatform.worker")
-
-
-CHILD_COMMAND = [sys.executable, "-m", "botplatform.worker.child"]
 
 
 def kill_group(child: subprocess.Popen) -> None:
@@ -33,7 +28,6 @@ def kill_group(child: subprocess.Popen) -> None:
 
 
 def run_in_child(
-    sessions: sessionmaker,
     run_id: uuid.UUID,
     worker_id: str,
     settings: Settings,
@@ -43,7 +37,8 @@ def run_in_child(
 
     The group is killed at the time limit, if the lease is lost, or if this worker is stopped.
     """
-    child = subprocess.Popen([*(command or CHILD_COMMAND), str(run_id)], start_new_session=True)
+    command = command or [sys.executable, "-m", "botplatform.worker.child"]
+    child = subprocess.Popen([*command, str(run_id)], start_new_session=True)
     time_limit = settings.run_time_limit_seconds
     deadline = time.monotonic() + time_limit
     outcome: tuple[Status, str, str] | None = None
@@ -60,7 +55,7 @@ def run_in_child(
             try:
                 exit_code = child.wait(timeout=min(settings.lease_renew_seconds, remaining))
             except subprocess.TimeoutExpired:
-                with sessions.begin() as session:
+                with SessionLocal.begin() as session:
                     owned = queue.renew(session, run_id, worker_id, settings.lease_seconds)
                 if not owned:
                     log.warning("Lost the lease on run %s, killing its process", run_id)
@@ -76,12 +71,12 @@ def run_in_child(
     except BaseException:
         # SIGTERM raises SystemExit here.
         kill_group(child)
-        with sessions.begin() as session:
+        with SessionLocal.begin() as session:
             queue.finish(session, run_id, Status.ERROR, "worker_stopped", "The worker was stopped")
         raise
     finally:
         kill_group(child)
-    with sessions.begin() as session:
+    with SessionLocal.begin() as session:
         queue.finish(session, run_id, *outcome)
 
 
@@ -94,28 +89,27 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     stop_on_sigterm()
 
-    settings = Settings()
-    sessions = session_factory()
+    settings = Settings.model_validate({})
     worker_id = socket.gethostname()
 
     registry.validate(BOTS)
-    with sessions.begin() as session:
+    with SessionLocal.begin() as session:
         registry.publish(session, BOTS)
     log.info("Worker %s published bots: %s", worker_id, [bot.id for bot in BOTS])
 
     while True:
-        with sessions.begin() as session:
+        with SessionLocal.begin() as session:
             reaped = queue.reap_expired(session)
         if reaped:
             log.warning("Marked runs from lost workers as errors: %s", reaped)
-        with sessions.begin() as session:
+        with SessionLocal.begin() as session:
             run = queue.claim_next(session, worker_id, settings.lease_seconds)
             run_id = run.id if run else None
         if run_id is None:
             time.sleep(settings.worker_poll_seconds)
             continue
         log.info("Starting run %s", run_id)
-        run_in_child(sessions, run_id, worker_id, settings)
+        run_in_child(run_id, worker_id, settings)
         log.info("Finished run %s", run_id)
 
 

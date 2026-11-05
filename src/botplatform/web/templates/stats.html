@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+<h1>Stats</h1>
+<ul>
+  <li>Only finished runs are counted. Queued and running runs are not counted anywhere on this page.</li>
+  <li>A run that someone watched in the live viewer (a <code>viewer_connected</code> event) may have been helped by a person. It is left out of Runs, the status columns and the rate, and is counted only in Watched.</li>
+  <li>Success rate is Success divided by Runs. Success means the status <code>success</code>, which for the ARCaptcha bots is a verified login. It shows <code>-</code> when Runs is 0.</li>
+  <li>The interval is a 95% Wilson interval, so a small count such as 80 of 80 is not shown as a certain 100%.</li>
+</ul>
+{% if rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Bot</th><th>Mode</th><th>Runs</th>
+      {% for status in columns %}<th>{{ status.value|capitalize }}</th>{% endfor %}
+      <th>Success rate (95% interval)</th><th>Watched</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.bot }}</td>
+      <td>{{ row.mode }}</td>
+      <td>{{ row.runs }}</td>
+      {% for status in columns %}<td>{{ row.counts.get(status.value, 0) }}</td>{% endfor %}
+      <td>{{ rate_text(row) }}</td>
+      <td>{{ row.watched }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No finished runs to show.</p>
+{% endif %}
+{% endblock %}

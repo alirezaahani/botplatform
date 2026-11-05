@@ -24,11 +24,27 @@ docker compose up --build
 
 Open http://127.0.0.1:8000, pick a bot on `/bots` and press launch. The first build downloads Chrome for Testing and takes a few minutes.
 
+## Configuration
+
+Settings are environment variables in `.env` (copy `.env.example`). `compose.yaml` reads them and passes each to the container that needs it. Credentials stay in `.env`, outside the source code, and `.env` is not committed.
+
+| Variable | Default in `.env.example` | Meaning |
+|---|---|---|
+| `POSTGRES_USER` | `botplatform` | Database user. |
+| `POSTGRES_PASSWORD` | `change-me` | Database password. Change it. Use letters and numbers only, because it is placed in a connection URL. |
+| `POSTGRES_DB` | `botplatform` | Database name. |
+| `WEB_PORT` | `8000` | Port the web UI is published on, on 127.0.0.1 only. |
+| `RUN_TIME_LIMIT_SECONDS` | `180` | A run is killed and marked `timeout` after this many seconds. |
+| `ARCAPTCHA_USERNAME` | `demo` | Login name the ARCaptcha bots use. The demo site shows these credentials on its login page. |
+| `ARCAPTCHA_PASSWORD` | `demo` | Login password the ARCaptcha bots use. |
+
+The three `POSTGRES_*`, `ARCAPTCHA_USERNAME` and `ARCAPTCHA_PASSWORD` must be set (`compose.yaml` refuses to start without them). `WEB_PORT` and `RUN_TIME_LIMIT_SECONDS` fall back to 8000 and 180 if unset. `compose.yaml` also accepts `LEASE_SECONDS` (30) and `LEASE_RENEW_SECONDS` (5) for the worker's run lease; they are not in `.env.example` and rarely need changing.
+
 ## Using it
 
 - `/bots`: the registered bots and their modes, with a launch button for each. The newest bot is first. The list has the baseline `arcaptcha`, one `arcaptcha-<profile>` bot per browser profile, the four `arcaptcha-solver-*` bots, and the `example` bot.
-- `/bonus` and `/bonus.md`: the bonus report, for each bot and mode, how often the site did not block the bot (filters `?bot=` and `?since=`). "Not blocked" means that the first `create` answer of a run had a CAPTCHA type other than `block`. It does not mean the run succeeded.
-- `/runs`: the run history.
+- `/stats`: one row per bot and mode with the number of finished runs, how many ended in each status, and the success rate with a 95% Wilson interval. Only finished runs count. Runs where someone opened the live viewer may have been helped by a person, so they are left out of the counts and the rate and shown only in the Watched column. Success means the status `success`, which for the ARCaptcha bots is a verified login.
+- `/runs`: the run history, newest first, with the queued, started and ended times (UTC) and the duration. Started, ended and duration are blank while a run has not started or finished.
 - `/runs/{id}`: status, reason, `challenge_id`, the timeline and screenshots. The page refreshes while the run is active.
 - The `example` bot (mode `direct`) uses no browser, adds one timeline event and succeeds. It checks the platform itself.
 - The `arcaptcha` bot opens the ARCaptcha demo login page, records the `challenge_id` from the `create` response, then logs in with the demo credentials and checks the result. Modes: `headless` (no window) or `headful` (visible in the live view).
@@ -88,22 +104,26 @@ Limits, stated plainly:
 ### Reproducing the measurement
 
 ```
-docker compose run --rm -T web python -m botplatform.batch --profiles all-signals --modes headful --runs 10 --stop-after 0 --pause 5 --jitter 3
+# a solver bot, both modes, 10 runs each
+docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-solver-cv-linear --runs 10 --pause 10
+
+# a profile bot, headful only
+docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-all-signals --modes headful --runs 10
 ```
 
-The worker must be running. The batch queues runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`), then a summary per bot and mode. Each run takes about 15 seconds. It talks to the live demo site, so it is not part of the tests.
+The worker must be running. The batch queues runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`), then a summary per bot and mode. It talks to the live demo site, so it is not part of the tests.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--profiles` | all profiles | Comma separated profile names. |
-| `--modes` | `headless,headful` | Comma separated modes. |
-| `--runs` | 10 | Runs per profile and mode. |
-| `--pause`, `--jitter` | 10, 5 | Seconds between runs, plus a random 0 to `jitter` seconds. |
-| `--run-timeout` | 240 | Seconds to wait for one run. |
-| `--stop-after` | 5 | Skip the rest of a bot and mode after this many `blocked` runs in a row. 0 never stops. |
-| `--seed` | random | Shuffle seed, to repeat an order. |
+| `--bots` | required | Comma separated bot ids, as listed on `/bots`. |
+| `--modes` | `headless,headful` | Comma separated modes. Every bot must support every mode given (exit code 2 otherwise). A bot with its own modes needs them named, for example `--bots example --modes direct`. |
+| `--runs` | 10 | Runs per bot and mode. |
+| `--pause` | 10 | Seconds between runs. |
+| `--seed` | random | Shuffle seed, to repeat an order. It is printed at the start. |
 
-Then open `/bonus` (or `/bonus.md`, add `?bot=arcaptcha-all-signals` or `?since=2026-11-04T09:00` to filter). Each row is a bot and mode: the outcomes, the `create` types, the not-blocked count with a 95% Wilson interval, and how many runs got a `challenge_id`. Runs where someone opened the live viewer are left out of the rates and counted in "Excluded".
+The runs of all bots and modes are shuffled together. A run that the batch has waited 240 seconds for is reported as `wait_timeout` and the batch carries on. Ctrl-C stops the batch and names a run that was already queued and is left to the worker.
+
+Then open `/stats`: every batch run is a normal run, so it is counted there with the rest of the history.
 
 ## Solving the slider (the solver bots)
 
@@ -135,7 +155,7 @@ Limits, stated plainly:
 
 - 80 of 80 does not mean a 100% success rate: with no failures it only says the failure rate is probably below about 4% over all runs (about 7% per mode). It also does not separate the four bots; neither the finder nor the movement shape changed whether the site accepted the answer.
 - One IP and one evening for both modes. Another network or time of day may differ, and a site that scores movement could change without notice.
-- The 80-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` or `mode=headless` and waits for each run. The batch runner above works on browser profiles and does not run these bots.
+- The 80-run comparison was driven by a small shell loop that posts to `/bots/<bot id>/runs` with `mode=headful` or `mode=headless` and waits for each run. It can now be repeated with the batch runner above, which has not been done.
 - The solver needs OpenCV, which is installed in the worker image only (the `solver` extra in `pyproject.toml`).
 
 To run one: pick a `arcaptcha-solver-*` bot on `/bots` and press launch. Open the run page to see the timeline: `solve_attempt` holds the finder's answer, the drag and where the handle ended (how to read it: [evidence/solver/README.md](evidence/solver/README.md)). Design reasons: [DECISIONS.md](DECISIONS.md), the solver sections of step 8.
@@ -162,19 +182,27 @@ To check the fake against the real site, run the live test (needs internet):
 docker compose -f compose.test.yaml run --rm --build tests pytest -m live -v -s
 ```
 
-CI (`.github/workflows/ci.yml`) runs the tests, then starts the stack and launches a run of each bot. You can run that check locally with `.github/scripts/smoke.sh`.
+Lint, format and type checks (they need `uv sync --all-extras`, so that pyright can resolve OpenCV, numpy, Selenium and FastAPI):
+
+```
+uv run ruff check src tests migrations
+uv run ruff format --check src tests migrations
+uv run pyright
+```
+
+CI (`.github/workflows/ci.yml`) runs these checks and the tests, then starts the stack and launches a run of each bot. You can run that check locally with `.github/scripts/smoke.sh`.
 
 Real output of the test command:
 
 ```
-45 passed in 38.54s      (Chrome tests, 4 workers)
-181 passed, 46 deselected in 8.90s    (everything else)
+45 passed in 37.81s      (Chrome tests, 4 workers)
+163 passed, 46 deselected in 9.95s    (everything else)
 (the live test is never run by this command)
 ```
 
 ### What the tests cover
 
-Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions behind them (which `create` answers block, which login responses count) are in `tests/test_verdicts.py` and need no Chrome. Platform cases are in the other files. The bonus work adds the rows at the end of the table. Each row lists the status and reason that the test asserts.
+Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions behind them (which `create` answers block, which login responses count) are in `tests/test_verdicts.py` and need no Chrome. Platform cases are in the other files. The bonus and stats work add rows at the end of the table. Each row lists the status and reason that the test asserts.
 
 | Case | Test | Result |
 |---|---|---|
@@ -192,11 +220,11 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions b
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
 | Browser profiles | `tests/test_profiles.py` (12 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; the run records the profile, the browser signals and the decoded `create` request. `tests/test_registry.py` (6 tests): the registry's ids, names and modes in order, every profile has a registered bot, `validate`'s rules | profile and registry rules |
-| Batch runner | `tests/test_batch.py` (13 tests): plan size and seeded shuffle, pause and jitter, the early stop, Ctrl-C, a run that never finishes, and a batch against the real queue with a stand-in worker | batch output and stop rules |
+| Batch runner | `tests/test_batch.py` (10 tests): plan size and seeded shuffle, one line per run and a pause between runs only, Ctrl-C, a run that never finishes, the arguments, an unknown bot or unsupported mode refused, a bot with only the `direct` mode batched, and a batch against the real queue with a stand-in worker | batch output and exit codes |
 | Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
-| Bonus report | `tests/test_bonus.py` (6 tests): per bot and mode counts, the first `create` answer only, viewer runs excluded, `?since=` and `?bot=`, `/bonus.md` header, empty history | rates and filters |
-| Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Bonus report list the newest bot first | page and report order |
-| Puzzle capture | `tests/test_puzzle_capture.py` (2 tests): a puzzle is saved as two artifacts and an event, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
+| Stats page | `tests/test_stats_page.py` (8 tests): counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns including a run with none | counts, rate and columns |
+| Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Stats page list the newest bot first | page and stats order |
+| Puzzle capture | `tests/test_puzzle_capture.py` (3 tests): a puzzle is saved as two artifacts and an event, images without a content type are saved as `.bin`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
 | Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
 | Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
 | Solver bots | `tests/test_solver_bot.py` (11 tests): a cv/linear and a silhouette/eased bot solve a real fixture puzzle on the fake page, each solver bot picks its profile by mode, a wrong first target is rejected and then solved, all attempts rejected ends `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |

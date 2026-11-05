@@ -24,8 +24,6 @@ return {
   hidden_field: hidden ? {value: hidden.value || null} : null
 };
 """
-# Screenshots must never show the password, so the field is blanked first.
-BLANK_PASSWORD_JS = "document.querySelectorAll('input[type=password]').forEach(e => e.value = '')"
 # What the site could learn about the browser, stored as is. The demo's credentials are public,
 # and these values are the evidence for which profile helps. It is async because of the
 # permissions query, so it ends by calling the callback that `execute_async_script` provides.

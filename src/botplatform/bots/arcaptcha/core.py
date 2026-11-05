@@ -1,17 +1,14 @@
 """The ARCaptcha bot: one class that runs the flow for whichever `BotSpec` it is built from.
 
 `run` reads the credentials, starts Chrome with the spec's profile for the run's mode, and hands a
-`Session` to `run_flow`. Any exception becomes an `unhandled_exception` result with the password
-removed from the text. The registered instances are at the bottom: the baseline, one bot for each
-other browser profile, and the solver bots.
+`Session` to `run_flow`. Exceptions propagate to the worker, which turns them into an
+`unhandled_exception` result. The registered instances are at the bottom: the baseline, one bot
+for each other browser profile, and the solver bots.
 """
 
 import os
-import traceback
-from urllib.parse import urlsplit
 
 from botplatform.bots.arcaptcha.flow import run_flow
-from botplatform.bots.arcaptcha.redaction import redact
 from botplatform.bots.arcaptcha.session import DEMO_URL, Session
 from botplatform.bots.arcaptcha.spec import BASELINE_SPEC, BotSpec, profile_spec, solver_spec
 from botplatform.bots.arcaptcha.timeouts import DEFAULT_TIMEOUTS, StepTimeouts
@@ -50,16 +47,10 @@ class ArcaptchaBot(Bot):
                 "missing_credentials",
                 "Set ARCAPTCHA_USERNAME and ARCAPTCHA_PASSWORD in .env",
             )
-        try:
-            profile = self.profile_for(ctx.mode)
-            with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
-                session = Session(ctx, driver, username, password, self.url, self.timeouts, profile)
-                return run_flow(session, self.spec.challenge)
-        except Exception:  # noqa: BLE001 - every failure becomes an error result
-            # The password must never reach the run's error field, whatever the exception says.
-            host = urlsplit(self.url).hostname or ""
-            details = redact(traceback.format_exc(), password, host)
-            return BotResult(Status.ERROR, "unhandled_exception", details)
+        profile = self.profile_for(ctx.mode)
+        with chrome(headless=ctx.mode == "headless", profile=profile) as driver:
+            session = Session(ctx, driver, username, password, self.url, self.timeouts, profile)
+            return run_flow(session, self.spec.challenge)
 
 
 BASELINE_BOT = ArcaptchaBot(BASELINE_SPEC)

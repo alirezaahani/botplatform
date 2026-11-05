@@ -7,8 +7,7 @@ import cv2
 import numpy as np
 import pytest
 
-from botplatform.solver.gap import FINDERS, GapNotFound
-from botplatform.solver.silhouette import find_gap_x_silhouette
+from botplatform.solver.gap import FINDERS, GapNotFound, find_gap_x_silhouette
 
 DIR = Path(__file__).parent / "fixtures" / "solver"
 MANIFEST = json.loads((DIR / "manifest.json").read_text())

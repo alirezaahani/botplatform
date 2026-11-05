@@ -53,7 +53,9 @@ def test_what_the_create_answers_say_about_the_run(creates, create_request_faile
 
 
 def test_an_unknown_captcha_type_is_named_so_it_can_be_looked_into():
-    assert classify_create([create("hologram")], False).error == "captcha_type='hologram'"
+    result = classify_create([create("hologram")], False)
+    assert result is not None
+    assert result.error == "captcha_type='hologram'"
 
 
 @pytest.mark.parametrize(

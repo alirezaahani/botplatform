@@ -11,7 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.remote.webelement import WebElement
 
 Path = list[tuple[int, int, float]]
 
@@ -80,7 +82,10 @@ class DragResult:
 
 
 def perform_drag(
-    driver: Any, handle: Any, path: Path, do: Callable[[Callable[[], Any]], Any] = lambda f: f()
+    driver: webdriver.Chrome,
+    handle: WebElement,
+    path: Path,
+    do: Callable[[Callable[[], Any]], Any] = lambda f: f(),
 ) -> DragResult:
     """Press the handle's centre, follow `path`, release: one motion with the pointer held.
 

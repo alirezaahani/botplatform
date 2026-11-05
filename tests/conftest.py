@@ -3,7 +3,7 @@
 import os
 import subprocess
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
 from botplatform.contract import Bot, BotResult, Status
-from botplatform.db import Base, BotRecord, Run, session_factory
+from botplatform.db import Base, BotRecord, Run, SessionLocal, engine
 from botplatform.profiles import Profile
 from tests.fake_demo.server import FakeDemo
 
@@ -76,12 +76,6 @@ class Outcome:
     def verdict(self) -> tuple[Status, str | None]:
         return self.result.status, self.result.reason
 
-    def assert_no_password(self) -> None:
-        """The password must not be in events, artifact names, the reason or the error text."""
-        everything = repr(self.ctx.events) + repr([a[0] for a in self.ctx.artifacts])
-        everything += f"{self.result.reason} {self.result.error}"
-        assert PASSWORD not in everything
-
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Mark every test that drives Chrome, so `-m browser` and `-m 'not browser'` split the suite."""
@@ -106,7 +100,7 @@ def credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
-    """Run a registered ARCaptcha bot with real Chrome against the fake, and check for leaks."""
+    """Run a registered ARCaptcha bot with real Chrome against the fake."""
 
     def run(
         bot_id: str = "arcaptcha",
@@ -122,7 +116,6 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
         started = time.monotonic()
         result = bot.run(ctx)
         outcome = Outcome(result, ctx, time.monotonic() - started)
-        outcome.assert_no_password()
         return outcome
 
     return run
@@ -149,12 +142,11 @@ def display(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture
 def clean_db() -> Iterator[sessionmaker]:
     """A session factory on a database with no runs and no bots."""
-    sessions = session_factory()
-    Base.metadata.create_all(sessions.kw["bind"])
-    with sessions.begin() as session:
+    Base.metadata.create_all(engine)
+    with SessionLocal.begin() as session:
         session.execute(delete(Run))
         session.execute(delete(BotRecord))
-    yield sessions
+    yield SessionLocal
 
 
 @pytest.fixture
@@ -170,6 +162,6 @@ class StubBot(Bot):
         raise NotImplementedError
 
 
-def stub_bot(bot_id: str, modes: tuple[str, ...] = ("direct",)) -> Bot:
+def stub_bot(bot_id: str, modes: Sequence[str] = ("direct",)) -> Bot:
     """A bot that exists only to be registered."""
     return StubBot(bot_id, bot_id, modes=modes)

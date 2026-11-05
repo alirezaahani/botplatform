@@ -204,7 +204,7 @@ A one-shot `migrate` service runs Alembic first, and web and workers wait for it
 
 ### 4b. Run details: `runs` plus an append-only `run_events` table
 
-Every step, every `challenge_id` and the login response go in `run_events`. Passwords are never stored.
+Every step, every `challenge_id` and the decoded login request and response go in `run_events`. The bots log in with the public demo account, so nothing is redacted (see "Redaction removed" below).
 
 **Why:** existing evidence cannot be overwritten, the UI gets a timeline, and any bot can add events without schema changes.
 
@@ -215,6 +215,16 @@ Every step, every `challenge_id` and the login response go in `run_events`. Pass
 - **A single JSON column:** it mixes everything together, and a bug could overwrite earlier evidence.
 - **Only the PDF's columns:** earlier IDs and the login response would be lost.
 - **Deriving the latest ID through a view:** there would be one copy, but `runs` would have no `challenge_id` column, and every read would depend on the view.
+
+**Event IDs are UUIDs, ordered by `at`:** `run_events` was the only table with an integer key, and that integer also gave the timeline its order. It now has a UUID `id` like `runs` and `run_artifacts`, and the timeline orders by `at`, as artifacts order by `created_at`. UUIDv7 would keep the order in the ID, but it needs Python 3.13 and Postgres 18.
+
+**Trade-off:** a clock that steps backwards during a run could misorder its events, and events written in one transaction share an `at`, so their order among themselves is not defined. Migration 0004 discards the old integer IDs. Downgrading numbers the events 1..n in `at` order.
+
+**Database sessions:** `db.py` creates one engine and one session factory (`SessionLocal`) when it is imported. Web routes get one session per request through `Depends`, and everything else opens a short `with SessionLocal() ...` block (`begin()` to write). Helpers take a `session` argument. The old `lru_cache` factory was lazy, and passing it around only hid that there is one engine per process.
+
+`launch_run` still commits explicitly. Committing when the dependency exits can happen after the response is sent, depending on the FastAPI version, so the browser could follow the redirect to a run that does not exist yet.
+
+**Trade-off:** importing `botplatform.db` now needs `DATABASE_URL` set, because `Settings()` is read at import. Compose gives it to `web`, `worker` and `migrate`, and the test compose file sets it too.
 
 ### 4c. Screenshots: in Postgres, in `run_artifacts`
 
@@ -421,11 +431,13 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 **Why:** the run history is the evidence store, and a bot's identity is its profile, so comparing profiles is comparing bots' runs, with no new tables or UI. The bots are always registered, with no flag, because hiding them would add a setting and a second code path. The signals are captured for every profile so a block can be compared with what the browser looked like.
 
-**Cost we accept:** more bots in the list. The capture reads `create` request bodies (never login, which holds the password). A failed decode of either body is noted in the event and never fails the run.
+**Cost we accept:** more bots in the list. The capture reads every watched request body (`create`, `login` and `answer`), so the login's password is stored. A failed decode of either body is noted in the event and never fails the run.
 
 **Not verified:** nothing here has run against demo.arcaptcha.co. The tests use the fake page, so they show the mechanism works (flags, script, events), not that any profile reduces blocking. The real request body may arrive in a form Chrome does not put in the network event; the code then falls back to `Network.getRequestPostData`, and records a note if that fails too.
 
 #### Bonus (b): two profiles, a batch runner and a report page
+
+*Later replaced: the report is now `/stats` and the batch flags changed, see "Stats page replaces the bonus report" below.*
 
 **What:**
 
@@ -456,13 +468,13 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `detect.py` the gap detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
 **Decisions and reasons:**
 
-- **Vendored CV, bytes in and out.** `detect.py` and `geometry.py` are copied unchanged from the captcha-solve project, with a thin wrapper that decodes bytes in memory (no temp files). **Why:** the submission must build from this repository alone, with no cross-repository dependency. OpenCV is an optional extra (`solver`), installed in the worker and test images only, so the web and migrate images stay small, and it is imported lazily so the bot registry loads without it.
+- **Vendored CV, trimmed, bytes in and out.** `detect.py` is derived from the captcha-solve project's `detect.py` and `geometry.py`, cut down to the one thing the solver uses: the left edge of the gap's body square. The rest (knobs, corners, centres, contours) was removed as unused code. `gap.py` decodes the bytes in memory (no temp files). **Why:** the submission must build from this repository alone, with no cross-repository dependency, and unused code is only more to read. Because it was trimmed it is no longer a verbatim copy, so taking a change from captcha-solve is now a manual job. OpenCV is an optional extra (`solver`), installed in the worker and test images only, so the web and migrate images stay small.
 - **Swappable finder.** A finder is `find_gap_x(background_png, piece_png, piece_top) -> int` registered by name in `FINDERS`; a bot is `arcaptcha-solver-<finder>-<mover>`. **Why:** a different method can then be compared fairly, with the same movement, retries and events. A finder raises `GapNotFound` for no gap or a target outside 0..196.
 - **Selenium `ActionChains` for the drag.** **Why:** live data showed Selenium and CDP events are both `isTrusted: true` and both were accepted, so the simpler path is enough. One motion: move to the handle centre, press, move, release, with no second grab.
 - **Two movement shapes.** `linear` is 8 equal steps over about 0.6 s (the shape proven live). `eased` is 25-40 steps with an ease-out speed profile over 0.8-1.5 s, a 1-2 px vertical wobble and no overshoot. **Why:** we do not know how sensitive the site is to movement, and the run history can now compare them.
@@ -476,13 +488,29 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 **Live result:** the `cv` bots solved 16 of 16 live runs on attempt 1 (6 in a smoke batch, 10 in the comparison below). The fake demo accepts an answer equal to a known target, so the tests show our own logic; the live runs are what show the site accepts these paths. See the next section and `evidence/solver/results-headful-2x2.md`.
 
+### Stats page replaces the bonus report
+
+**What:** `/bonus`, `/bonus.md`, their `?since=` and `?bot=` filters and the `create` captcha type columns are gone. `/stats` shows, for each bot and mode, the finished runs by status, the success rate with a 95% Wilson interval, and the runs a person watched. Runs with a `viewer_connected` event are left out of the rate and counted only as watched. The batch runner now takes `--bots` (bot ids) instead of `--profiles`, so it can run the solver bots, and loses `--jitter`, `--stop-after` and `--run-timeout`. All eleven bots are kept.
+
+**Why:** the bonus report measured whether the first `create` answer was a block. Now that the solver bots finish the login, the measure that matters is verified success, and the report was built around the question that has been answered. The batch had grown extras (jitter, early stop) that repeating a measurement does not need, and it could not run the solver bots at all. All eleven bots are kept by the user's decision, so every recorded comparison can still be re-run, at the cost of a longer list on `/bots`.
+
+**Cost:** the page no longer tells why a run was blocked, only that it was; the reason is on each run's page. Old links to `/bonus` return 404. The evidence files record results made with the old report and flags.
+
+### Redaction removed: passwords are stored and shown
+
+**What:** the redaction of exception text, the blanking of the password field before screenshots and the rule that login request bodies are never captured are gone. An exception now propagates from the bot and the worker stores its traceback as is. Every request body the watcher sees, login included, is read and recorded as a `login_request`, `create_request` or `answer_request` event. Runs stored before this change keep a `login_response` event instead of `login_request`.
+
+**Why:** the bots use the demo's public login (`demo`/`demo`, printed on its login page) and the web port is bound to 127.0.0.1. Redaction protected nothing, and it garbled tracebacks, because every "demo" became `[password]`.
+
+**Cost we accept:** a real password given in `ARCAPTCHA_PASSWORD` would be stored in the database and visible on run pages, in events and in screenshots. Use only the demo account.
+
 ### Solver: the silhouette finder and the 2x2 comparison
 
-**What:** a second finder, `silhouette` (`botplatform/solver/silhouette.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
+**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `botplatform/solver/gap.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `cv` bots the four bots are a 2x2 of finder x movement for the live comparison.
 
 **Method:** one-dimensional silhouette matching. The piece's row (`piece_top`) and exact shape (its alpha channel, pixels above 128) are known, so only x is unknown. For each x in 0..196 the score is the mean brightness of a thin ring (about 2 px) just outside the silhouette, minus the mean brightness inside it, using `cv2.matchTemplate` on the grayscale strip of the background. The answer is the best x. It raises `GapNotFound` if the best score is under 40 gray levels or does not beat every x at least 8 px away by 20. About 60 lines, OpenCV and numpy only, bytes in memory.
 
-**Why it is a useful comparison:** it is an independent method. It does not use `find_piece_mask` or `extract_geometry`, so it does not depend on the halo detector or on the "body square minus 10" rule. It needs no reference data. It uses the piece image, which the `cv` finder ignores. If the two finders agree on a puzzle that is good evidence for both; if they disagree, the live result shows which one the site accepts.
+**Why it is a useful comparison:** it is an independent method. It does not use `find_piece_mask` or `body_left`, so it does not depend on the halo detector or on the "body square minus 10" rule. It needs no reference data. It uses the piece image, which the `cv` finder ignores. If the two finders agree on a puzzle that is good evidence for both; if they disagree, the live result shows which one the site accepts.
 
 **Choice of score:** four simple scores were tried on the 8 fixtures before any bot was registered: edge strength along the outline, ring minus inside, a wider ring minus inside, and ring minus wider ring. The first two were exact on 8 of 8 (the others were off by up to 2 px). Ring minus inside was kept because it follows what the gap looks like (light halo, dark interior). No tuning beyond that.
 
@@ -510,6 +538,10 @@ Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv
 **What the comparison can and cannot say:** both finders are accepted by the site, so the silhouette method is a valid independent second method. Neither finder nor movement shape changed acceptance. With no failures in 40 runs per mode, the true failure rate is only bounded (probably below about 7% per mode, about 4% over all 80), and the four bots cannot be ranked. One IP and one evening for both modes: another IP or time of day may differ. The fake demo checks only that the answer equals a known target for one fixture.
 
 **Reaction to a challenge is a strategy.** A bot's reaction to a challenge is a strategy object (`Challenge`) on its spec, so a bot for another challenge type is a new class, not a flag. The default, `GiveUp`, ends the run as `blocked` / `challenge_unsolved`.
+
+## Linting and type checking
+
+CI runs ruff (its default rules plus `UP031`, `UP032` and `G`) and pyright in standard mode over `src`, `tests` and `migrations`. The code has no `type: ignore` comments. Log calls keep `%s` arguments so that the message is built only if the record is emitted, and ruff's `G` rules enforce this. f-strings are used everywhere else.
 
 ## Platform support
 
