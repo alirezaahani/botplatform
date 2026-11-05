@@ -75,6 +75,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --extra worker --extra web --extra solver --no-editable
+# The migrations too, so a test can check them against the models.
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY tests ./tests
 USER app
 CMD ["pytest"]
