@@ -164,7 +164,7 @@ Each run happens in a child process. At the time limit, the worker kills the who
 - **Graceful stop:** on `SIGTERM` the worker kills the child's process group and marks the run `error` with reason `worker_stopped`.
 - **No automatic retry:** a lost run is `error`, not re-queued, because a run logs in on a real site and a repeat could duplicate that side effect.
 
-**Evidence (2026-11-04, `--scale worker=2`, real runs started from the UI):** `docker kill` of the worker that held a run: the other worker marked it `error`/`worker_lost` 25 seconds later. `docker stop` of the holder: the run became `error`/`worker_stopped` within 5 seconds. Both showed correctly on the run page and in the history. Platform tests (`tests/test_queue.py`, `tests/test_worker.py`) cover claim order, concurrent claims with no duplicate, lease renewal and reaping, the time limit killing a grandchild process, a child that exits with no result, and `SIGTERM`.
+**Evidence (2026-11-04, `--scale worker=2`, real runs started from the UI):** `docker kill` of the worker that held a run: the other worker marked it `error`/`worker_lost` 25 seconds later. `docker stop` of the holder: the run became `error`/`worker_stopped` within 5 seconds. Both showed correctly on the run page and in the history. Platform tests (`tests/core/test_queue.py`, `tests/core/test_worker.py`) cover claim order, concurrent claims with no duplicate, lease renewal and reaping, the time limit killing a grandchild process, a child that exits with no result, and `SIGTERM`.
 
 **Cost we accept:**
 
@@ -402,7 +402,7 @@ Measured on 2026-11-04, one host, Chrome 156:
 | Check | Result |
 |---|---|
 | Full test suite in Docker (`compose.test.yaml`) | 65 passed (1 live test deselected), 92s |
-| `tests/check_viewer.sh` on the worker image | Xvfb `:99`, x11vnc on 5900 and noVNC on 6080 all up |
+| `tests/core/check_viewer.sh` on the worker image | Xvfb `:99`, x11vnc on 5900 and noVNC on 6080 all up |
 | Headful ARCaptcha run through the stack | ran on Xvfb and ended `blocked` / `captcha_blocked`, like headless |
 | `/runs/{id}/live` while the run was active | redirected to noVNC, which came through the proxy; the WebSocket proxy gave the RFB handshake (`RFB 003.008`) |
 | `viewer_connected` and the warning | event written, warning on the run page |
@@ -429,7 +429,7 @@ Blocked and failed attempts are reported as they happened, whatever the bonus ac
 
 #### Bonus (a): profiles and probe bots
 
-**What:** a `Profile` (`profiles.py`, outside the `bots` package so the web image can import it without Selenium) is a named set of Chrome arguments, dropped Selenium switches and an optional start-up script. `chrome(profile=...)` applies it. There are two now: `baseline` (today's behaviour, nothing added) and `stealth-flags`. Every non-baseline profile gets its own registered bot, `arcaptcha-<profile>`; `arcaptcha` stays the baseline with its old name. Adding a profile is one entry in `PROFILES`. Every ARCaptcha run records `browser_profile` (the settings used), `browser_signals` (what the page can see about the browser) and `create_request` (the decoded `create` request, which carries the signals the server receives, and its response). Nothing is redacted: the demo's credentials are demo/demo.
+**What:** a `Profile` (`bots/utils/profiles.py`, which imports no Selenium) is a named set of Chrome arguments, dropped Selenium switches and an optional start-up script. `chrome(profile=...)` applies it. There are two now: `baseline` (today's behaviour, nothing added) and `stealth-flags`. Every non-baseline profile gets its own registered bot, `arcaptcha-<profile>`; `arcaptcha` stays the baseline with its old name. Adding a profile is one entry in `PROFILES`. Every ARCaptcha run records `browser_profile` (the settings used), `browser_signals` (what the page can see about the browser) and `create_request` (the decoded `create` request, which carries the signals the server receives, and its response). Nothing is redacted: the demo's credentials are demo/demo.
 
 **Why:** the run history is the evidence store, and a bot's identity is its profile, so comparing profiles is comparing bots' runs, with no new tables or UI. The bots are always registered, with no flag, because hiding them would add a setting and a second code path. The signals are captured for every profile so a block can be compared with what the browser looked like.
 
@@ -470,13 +470,13 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-halo-linear` and `arcaptcha-solver-halo-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `halo` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `detect.py` the gap detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-halo-linear` and `arcaptcha-solver-halo-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `halo` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `bots/arcaptcha/gap_finders.py` (the finders), `bots/arcaptcha/gap_halo_detector.py` (the gap detection), `bots/utils/drag.py` (paths and the executor) and `bots/arcaptcha/slider_solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
 **Decisions and reasons:**
 
-- **Vendored CV, trimmed, bytes in and out.** `detect.py` is derived from the captcha-solve project's `detect.py` and `geometry.py`, cut down to the one thing the solver uses: the left edge of the gap's body square. The rest (knobs, corners, centres, contours) was removed as unused code. `gap.py` decodes the bytes in memory (no temp files). **Why:** the submission must build from this repository alone, with no cross-repository dependency, and unused code is only more to read. Because it was trimmed it is no longer a verbatim copy, so taking a change from captcha-solve is now a manual job. OpenCV is an optional extra (`solver`), installed in the worker and test images only, so the web and migrate images stay small.
+- **Vendored CV, trimmed, bytes in and out.** `gap_halo_detector.py` is derived from the captcha-solve project's `detect.py` and `geometry.py`, cut down to the one thing the solver uses: the left edge of the gap's body square. The rest (knobs, corners, centres, contours) was removed as unused code. `gap_finders.py` decodes the bytes in memory (no temp files). **Why:** the submission must build from this repository alone, with no cross-repository dependency, and unused code is only more to read. Because it was trimmed it is no longer a verbatim copy, so taking a change from captcha-solve is now a manual job. OpenCV is an optional extra (`solver`), installed in the worker and test images only, so the web and migrate images stay small.
 - **Swappable finder.** A finder is `find_gap_x(background_png, piece_png, piece_top) -> int` registered by name in `FINDERS`; a bot is `arcaptcha-solver-<finder>-<mover>`. **Why:** a different method can then be compared fairly, with the same movement, retries and events. A finder raises `GapNotFound` for no gap or a target outside 0..196.
 - **Selenium `ActionChains` for the drag.** **Why:** live data showed Selenium and CDP events are both `isTrusted: true` and both were accepted, so the simpler path is enough. One motion: move to the handle centre, press, move, release, with no second grab.
 - **Two movement shapes.** `linear` is 8 equal steps over about 0.6 s (the shape proven live). `eased` is 25-40 steps with an ease-out speed profile over 0.8-1.5 s, a 1-2 px vertical wobble and no overshoot. **Why:** we do not know how sensitive the site is to movement, and the run history can now compare them.
@@ -514,7 +514,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver: the silhouette finder and the 2x2 comparison
 
-**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `botplatform/solver/gap.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `halo` bots the four bots are a 2x2 of finder x movement for the live comparison.
+**What:** a second finder, `silhouette` (`find_gap_x_silhouette` in `bots/arcaptcha/gap_finders.py`), and two more bots, `arcaptcha-solver-silhouette-linear` and `arcaptcha-solver-silhouette-eased` (same headful / `all-signals` setup). With the two `halo` bots the four bots are a 2x2 of finder x movement for the live comparison.
 
 **Method:** one-dimensional silhouette matching. The piece's row (`piece_top`) and exact shape (its alpha channel, pixels above 128) are known, so only x is unknown. For each x in 0..196 the score is the mean brightness of a thin ring (about 2 px) just outside the silhouette, minus the mean brightness inside it, using `cv2.matchTemplate` on the grayscale strip of the background. The answer is the best x. It raises `GapNotFound` if the best score is under 40 gray levels or does not beat every x at least 8 px away by 20. About 60 lines, OpenCV and numpy only, bytes in memory.
 
@@ -546,6 +546,19 @@ Exact match with `halo_target`: 8 of 8; largest difference 0 px; within 4 px of 
 **What the comparison can and cannot say:** both finders are accepted by the site, so the silhouette method is a valid independent second method. Neither finder nor movement shape changed acceptance. With no failures in 40 runs per mode, the true failure rate is only bounded (probably below about 7% per mode, about 4% over all 80), and the four bots cannot be ranked. One IP and one evening for both modes: another IP or time of day may differ. The fake demo checks only that the answer equals a known target for one fixture.
 
 **Reaction to a challenge is a strategy.** A bot's reaction to a challenge is a strategy object (`Challenge`) on its spec, so a bot for another challenge type is a new class, not a flag. The default, `GiveUp`, ends the run as `blocked` / `challenge_unsolved`.
+
+## Layout refactor: shared Selenium helpers and tests that mirror the code
+
+**What:**
+- The Selenium helpers moved to `bots/utils/`: `browser.py` (`chrome`, `do`, `wait_for`, `screenshot`, `BrowserSession`), `profiles.py`, `network.py` (`ResponseWatcher`), `drag.py` and `page_scripts.py`. A `SeleniumBot` base class there picks the profile for the mode, starts Chrome, records `browser_profile`, turns a `StepTimeout` into a `timeout` result and takes an `error` screenshot. A bot implements only `steps(browser)`. The core still never imports them.
+- `solver/` is gone. Its files went to `bots/utils/drag.py` (the generic drag) and to `bots/arcaptcha/` (`gap_finders.py`, `gap_halo_detector.py`). The `arcaptcha/` modules are named for the step they do: `session`, `checkbox`, `login`, `responses`, `codec`, `puzzle_capture`, `slider_solver`.
+- The `cv` finder is now called `halo`, after what it looks for. The bot ids and the evidence use the new name.
+- The tests mirror the code: `tests/core/`, `tests/bots/utils/` (against a plain local page, with no ARCaptcha imports) and `tests/bots/arcaptcha/` (with the fake demo and fixtures). Three wiring checks were added: the migrations against the models (`alembic upgrade head` then `alembic check`, in a database of its own), `SeleniumBot` refusing modes Chrome cannot run and `profile_by_mode` keys that are not its modes, and the solver bots being generated from `FINDERS` x `MOVERS`, with a snapshot of the whole registry.
+- The migrations are squashed into one `0001_initial_schema.py`.
+
+**Why:** the helpers had no reason to sit beside one site, and a second Selenium bot should not need to copy them. A mistyped mode or profile key used to fall back silently (a typo in a mode would run headful), so it is refused at construction. The solver bots were a hand-written list that could drift from the finders and movers. Nothing is deployed, so there is no database to migrate and the history of schema changes is only noise.
+
+**Cost:** an existing database that was built from the old migrations must be recreated (`docker compose down -v`). Paths in the older sections of this file and in the evidence were updated, but the text of those sections still describes what was decided at the time. Taking a change from captcha-solve into `gap_halo_detector.py` is still a manual job.
 
 ## Linting and type checking
 

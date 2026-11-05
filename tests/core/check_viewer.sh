@@ -1,6 +1,6 @@
 #!/bin/bash
 # Checks that the worker image's start script brings up Xvfb, x11vnc and noVNC.
-# Run from the project root: tests/check_viewer.sh   (needs Docker and a .env, like `compose up`)
+# Run from the project root: tests/core/check_viewer.sh   (needs Docker and a .env, like `compose up`)
 set -eu
 docker compose build worker
 # start-worker runs the command in the background, so its stdin is empty: pass the code with -c.
