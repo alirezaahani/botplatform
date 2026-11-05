@@ -1,68 +1,20 @@
-"""Page steps: load, tick the checkbox, wait for the `create`, log in."""
+"""Log in and check that the login really succeeded."""
 
-import time
 from typing import Any
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
+from botplatform.bots.arcaptcha.responses import drain
 from botplatform.bots.arcaptcha.session import Session
-from botplatform.bots.arcaptcha.traffic import classify, drain
-from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, do, screenshot, wait_for
-from botplatform.bots.utils.page_scripts import record_browser_signals
+from botplatform.bots.utils.browser import StepTimeout, do, wait_for
 from botplatform.contract import BotResult, Status
 
-CHECKBOX = "#input-checkbox"
 TOAST = ".Vue-Toastification__toast"
 # vue-toastification adds `Vue-Toastification__toast--<type>`; the demo calls `success` or `error`.
 TOAST_SUCCESS = "Vue-Toastification__toast--success"
 TOAST_ERROR = "Vue-Toastification__toast--error"
 LOGIN_BUTTON = "//button[normalize-space()='Login']"
-
-
-def open_and_tick(session: Session) -> BotResult | None:
-    """Tick the checkbox. Return the failure this causes, or None if the widget accepted us."""
-    driver, ctx, timeouts = session.driver, session.ctx, session.timeouts
-    driver.set_page_load_timeout(timeouts.load_page)
-    try:
-        do(session, lambda: driver.get(session.url))
-    except TimeoutException:
-        raise StepTimeout("load_page") from None
-    ctx.event("page_loaded", {"iframes": len(driver.find_elements(By.TAG_NAME, "iframe"))})
-    record_browser_signals(session)
-    wait_for(
-        session,
-        lambda: driver.find_elements(By.CSS_SELECTOR, CHECKBOX),
-        timeouts.find_checkbox,
-        "find_checkbox",
-    )
-    screenshot(session, "before-click")
-    do(session, lambda: driver.find_element(By.CSS_SELECTOR, CHECKBOX).click(), retry=False)
-    ctx.event("checkbox_clicked")
-
-    # A request that failed will never get a response, so there is nothing more to wait for.
-    wait_for(
-        session,
-        lambda: drain(session) or "create" in session.watcher.failed,
-        timeouts.create_response,
-        "create_response",
-    )
-    # A later `create` can follow, so keep listening briefly.
-    deadline = time.monotonic() + timeouts.more_create_responses
-    while time.monotonic() < deadline:
-        do(session, lambda: drain(session))
-        time.sleep(POLL_SECONDS)
-    watcher = session.watcher
-    ctx.event(
-        "create_requests",
-        {
-            "post_requests_started": watcher.started.count("create"),
-            "failed": watcher.failed.count("create"),
-            "responses": len(session.creates),
-            "not_counted": [r for r in watcher.ignored if r["name"] == "create"],
-        },
-    )
-    return classify(session)
 
 
 def log_in(session: Session) -> BotResult | None:

@@ -2,8 +2,8 @@
 
 import pytest
 
-from botplatform.bots.arcaptcha.page import verify_login
-from botplatform.bots.arcaptcha.traffic import classify_create
+from botplatform.bots.arcaptcha.checkbox import classify_create
+from botplatform.bots.arcaptcha.login import verify_login
 from botplatform.contract import BotResult, Status
 
 BLOCKED = BotResult(Status.BLOCKED, "captcha_blocked")

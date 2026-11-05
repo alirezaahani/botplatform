@@ -4,12 +4,28 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from botplatform.bots.arcaptcha import gap_finders, puzzle
-from botplatform.bots.arcaptcha.session import Session
-from botplatform.bots.arcaptcha.traffic import classify, drain, types
+from selenium.webdriver.common.by import By
+
+from botplatform.bots.arcaptcha import gap_finders
+from botplatform.bots.arcaptcha.checkbox import classify, types
+from botplatform.bots.arcaptcha.puzzle_capture import capture_puzzle
+from botplatform.bots.arcaptcha.responses import drain
+from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session
 from botplatform.bots.utils import drag
-from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, describe, do
+from botplatform.bots.utils.browser import POLL_SECONDS, StepTimeout, describe, do, wait_for
 from botplatform.contract import BotResult, Status
+
+# The widget being dragged: the slider's handle and the puzzle piece it moves.
+HANDLE = "div.draggable"
+PIECE = "img.puzzle"
+# The handle's and piece's `left` right now, in px (None when missing).
+LEFTS_JS = """
+const left = (selector) => {
+  const el = document.querySelector(selector);
+  return el ? parseFloat(getComputedStyle(el).left) : null;
+};
+return {handle: left(arguments[0]), piece: left(arguments[1])};
+"""
 
 
 @dataclass(kw_only=True)
@@ -88,7 +104,7 @@ class SliderSolver:
 
     def _attempt(self, session: Session, n: int) -> tuple[BotResult | None, bool]:
         """One attempt on the current puzzle: (a final result or None, whether it was accepted)."""
-        current = puzzle.puzzle_ready(session)
+        current = puzzle_ready(session)
         attempt = Attempt(
             n=n,
             puzzle=current.n,
@@ -119,7 +135,7 @@ class SliderSolver:
         def snapshot() -> dict[str, Any]:
             lefts = do(
                 session,
-                lambda: session.driver.execute_script(puzzle.LEFTS_JS, puzzle.HANDLE, puzzle.PIECE),
+                lambda: session.driver.execute_script(LEFTS_JS, HANDLE, PIECE),
             )
             return lefts or {}
 
@@ -130,7 +146,7 @@ class SliderSolver:
                 attempt.steps = len(path)
                 result = drag.perform_drag(
                     session.driver,
-                    puzzle.handle(session),
+                    handle(session),
                     path,
                     snapshot,
                     lambda lefts: (lefts.get("handle") or 0) > 0,
@@ -168,3 +184,29 @@ def await_next_puzzle(session: Session, n: int, answers_before: int) -> str:
         do(session, lambda: drain(session))
         time.sleep(POLL_SECONDS)
     return "rejected"
+
+
+def handle(session: Session) -> Any:
+    """The slider handle once it is on screen, or StepTimeout."""
+    found = wait_for(
+        session,
+        lambda: [
+            e for e in session.driver.find_elements(By.CSS_SELECTOR, HANDLE) if e.is_displayed()
+        ],
+        session.timeouts.puzzle_ready,
+        "puzzle_ready",
+    )
+    return found[0]
+
+
+def puzzle_ready(session: Session) -> CapturedPuzzle:
+    """The current puzzle with its handle on screen and its images in hand, or StepTimeout."""
+    deadline = time.monotonic() + session.timeouts.puzzle_ready
+    handle(session)
+    while session.capture is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or session.puzzles == 0:
+            raise StepTimeout("puzzle_ready")
+        challenge_id = session.creates[-1]["challenge_id"]
+        capture_puzzle(session, challenge_id, n=session.puzzles, seconds=remaining)
+    return session.capture

@@ -1,12 +1,11 @@
-"""Network responses: reading them off the watcher, recording them and classifying `create`s."""
+"""Network responses: reading them off the watcher and recording them."""
 
 from typing import Any
 
 from botplatform.bots.arcaptcha.codec import decode_body
-from botplatform.bots.arcaptcha.puzzle import capture_puzzle
+from botplatform.bots.arcaptcha.puzzle_capture import capture_puzzle
 from botplatform.bots.arcaptcha.session import Session
 from botplatform.bots.utils.network import CapturedResponse, exchange_record
-from botplatform.contract import BotResult, Status
 
 
 def drain(session: Session) -> bool:
@@ -58,32 +57,3 @@ def handle_create(session: Session, response: CapturedResponse) -> None:
     session.capture = None
     session.ctx.event("create_response", info)
     session.pending_puzzle = (challenge_id,) if info["captcha_type"] == "puzzle" else None
-
-
-def types(creates: list[dict[str, Any]]) -> list[str]:
-    """The types of the `create` answers we could decode. Only those decide the outcome."""
-    return [c["captcha_type"] for c in creates if c["captcha_type"] is not None]
-
-
-def classify_create(creates: list[dict[str, Any]], create_failed: bool) -> BotResult | None:
-    """The failure the `create` answers show, or None if the widget accepted us."""
-    if not creates and create_failed:
-        return BotResult(
-            Status.ERROR, "create_request_failed", "The create request failed before a response"
-        )
-    seen = types(creates)
-    if "block" in seen:
-        return BotResult(Status.BLOCKED, "captcha_blocked")
-    if not any(create["challenge_id"] for create in creates):
-        return BotResult(Status.FAILED, "missing_challenge_id")
-    latest = seen[-1] if seen else None
-    if latest in {"puzzle", "question", "2fa"}:
-        return BotResult(Status.BLOCKED, "challenge_unsolved")
-    if latest not in {"accept", "cookie"}:
-        # Never guess: a type we have not seen cannot be treated as an accepted checkbox.
-        return BotResult(Status.ERROR, "unknown_captcha_type", f"captcha_type={latest!r}")
-    return None
-
-
-def classify(session: Session) -> BotResult | None:
-    return classify_create(session.creates, "create" in session.watcher.failed)

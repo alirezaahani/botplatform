@@ -1,25 +1,45 @@
-"""Capturing the puzzle's images and finding its handle."""
+"""Capturing the puzzle's images and geometry."""
 
-import time
 from typing import Any
 
-from selenium.webdriver.common.by import By
-
-from botplatform.bots.arcaptcha.js import PUZZLE_INFO_JS
 from botplatform.bots.arcaptcha.session import CapturedPuzzle, Session
-from botplatform.bots.utils.browser import StepTimeout, describe, wait_for
+from botplatform.bots.utils.browser import describe, wait_for
 from botplatform.bots.utils.page_scripts import fetch_in_page, save_fetched
 
-# The widget being dragged: the slider's handle and the puzzle piece it moves.
-HANDLE = "div.draggable"
-PIECE = "img.puzzle"
-# The handle's and piece's `left` right now, in px (None when missing).
-LEFTS_JS = """
-const left = (selector) => {
-  const el = document.querySelector(selector);
-  return el ? parseFloat(getComputedStyle(el).left) : null;
+# The puzzle's images. The piece is `img.puzzle` and the background is the other image whose src
+# has `/puzzles/` (both seen in the real DOM). It also records the rectangles around them. A src
+# already in `seen` belongs to an earlier puzzle.
+PUZZLE_INFO_JS = """
+const seen = arguments[0];
+const piece = document.querySelector('img.puzzle');
+if (!piece || !piece.src) return null;
+const background = Array.from(document.querySelectorAll('img')).find(
+  (img) => img !== piece && img.src.includes('/puzzles/')
+);
+if (!background || !background.src) return null;
+if (seen.includes(piece.src) || seen.includes(background.src)) return null;
+const loaded = (img) => img.complete && img.naturalWidth > 0;
+if (!loaded(piece) || !loaded(background)) return null;
+const rect = (el) => {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return {x: r.x, y: r.y, width: r.width, height: r.height};
 };
-return {handle: left(arguments[0]), piece: left(arguments[1])};
+const image = (img) => ({
+  src: img.src, natural_width: img.naturalWidth, natural_height: img.naturalHeight,
+  rect: rect(img)
+});
+const computed = getComputedStyle(piece);
+return {
+  background: image(background),
+  piece: Object.assign(image(piece), {
+    style_left: piece.style.left, style_top: piece.style.top,
+    computed_left: computed.left, computed_top: computed.top
+  }),
+  wrapper_rect: rect(background.parentElement),
+  piece_parent_rect: rect(piece.parentElement),
+  device_pixel_ratio: window.devicePixelRatio
+};
 """
 
 
@@ -72,29 +92,3 @@ def pixels(piece: dict[str, Any]) -> int | None:
         return round(float(str(piece.get("style_top", "")).removesuffix("px")))
     except ValueError:
         return None
-
-
-def handle(session: Session) -> Any:
-    """The slider handle once it is on screen, or StepTimeout."""
-    found = wait_for(
-        session,
-        lambda: [
-            e for e in session.driver.find_elements(By.CSS_SELECTOR, HANDLE) if e.is_displayed()
-        ],
-        session.timeouts.puzzle_ready,
-        "puzzle_ready",
-    )
-    return found[0]
-
-
-def puzzle_ready(session: Session) -> CapturedPuzzle:
-    """The current puzzle with its handle on screen and its images in hand, or StepTimeout."""
-    deadline = time.monotonic() + session.timeouts.puzzle_ready
-    handle(session)
-    while session.capture is None:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or session.puzzles == 0:
-            raise StepTimeout("puzzle_ready")
-        challenge_id = session.creates[-1]["challenge_id"]
-        capture_puzzle(session, challenge_id, n=session.puzzles, seconds=remaining)
-    return session.capture
