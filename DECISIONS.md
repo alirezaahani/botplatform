@@ -456,7 +456,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `bots/arcaptcha/solver.py`. Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `bots/arcaptcha/solver.py` (`SliderSolver`, the bot's `Challenge`). Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
@@ -508,6 +508,8 @@ Exact match with `cv_target`: 8 of 8; largest difference 0 px; within 4 px of cv
 **Headless:** the same 2x2 was then run in headless mode with the `all-signals-headless` profile: another 40 of 40 `success` / `solved`, all on attempt 1 (medians 14.7 to 16.3 s). See `evidence/solver/results-headless-2x2.md` and `runs-headless.json`. Together that is 80 of 80 runs.
 
 **What the comparison can and cannot say:** both finders are accepted by the site, so the silhouette method is a valid independent second method. Neither finder nor movement shape changed acceptance. With no failures in 40 runs per mode, the true failure rate is only bounded (probably below about 7% per mode, about 4% over all 80), and the four bots cannot be ranked. One IP and one evening for both modes: another IP or time of day may differ. The fake demo checks only that the answer equals a known target for one fixture.
+
+**Reaction to a challenge is a strategy.** A bot's reaction to a challenge is a strategy object (`Challenge`) on its spec, so a bot for another challenge type is a new class, not a flag. The default, `GiveUp`, ends the run as `blocked` / `challenge_unsolved`.
 
 ## Platform support
 
