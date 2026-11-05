@@ -77,13 +77,7 @@ def stats_page(request: Request, session: DbSession) -> HTMLResponse:
         "stats.html",
         {
             "rows": collect(session),
-            "columns": (
-                Status.SUCCESS,
-                Status.BLOCKED,
-                Status.FAILED,
-                Status.TIMEOUT,
-                Status.ERROR,
-            ),
+            "columns": [status for status in Status if status not in ACTIVE_STATUSES],
             "rate_text": rate_text,
         },
     )
