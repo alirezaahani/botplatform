@@ -390,7 +390,7 @@ def test_run_keeps_the_site_host_in_the_error_but_hides_the_password(monkeypatch
     monkeypatch.setenv("ARCAPTCHA_USERNAME", "demo")
     monkeypatch.setenv("ARCAPTCHA_PASSWORD", "demo")
 
-    def explode(self):
+    def explode(session, solve_with):
         raise RuntimeError("could not load https://demo.arcaptcha.co/ for demo")
 
     monkeypatch.setattr(core, "run_flow", explode)
