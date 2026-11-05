@@ -6,7 +6,7 @@ Starting Chrome, and the calls every step needs: `do` (alert handling), `wait_fo
 import os
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -39,7 +39,7 @@ def describe(error: Exception, limit: int = 200) -> str:
 
 
 @contextmanager
-def chrome(*, headless: bool, profile: Profile = BASELINE) -> Iterator[webdriver.Chrome]:
+def chrome(*, headless: bool, profile: Profile = BASELINE) -> Generator[webdriver.Chrome]:
     """Start the pinned Chrome for Testing, and always quit it.
 
     The worker image sets `CHROME_BINARY` and `CHROMEDRIVER_BINARY`. Passing the driver path
@@ -115,7 +115,10 @@ def raise_if_alert_open(driver: webdriver.Chrome) -> None:
     driver.execute_script("return 0")
 
 
-def wait_for(session: BrowserSession, check: Callable[[], Any], seconds: float, step: str) -> Any:
+def wait_for[T](
+    session: BrowserSession, check: Callable[[], T | None], seconds: float, step: str
+) -> T:
+    """Poll `check` until it returns something truthy, and return that. Raises `StepTimeout`."""
     deadline = time.monotonic() + seconds
     while True:
         result = do(session, check)
