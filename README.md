@@ -111,7 +111,7 @@ docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-solv
 docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-all-signals --modes headful --runs 10
 ```
 
-The worker must be running. The batch queues runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`), then a summary per bot and mode. It talks to the live demo site, so it is not part of the tests.
+The worker must be running. The batch queues the runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`). The results are on `/stats`. It talks to the live demo site, so it is not part of the tests.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -119,9 +119,8 @@ The worker must be running. The batch queues runs one at a time through the norm
 | `--modes` | `headless,headful` | Comma separated modes. Every bot must support every mode given (exit code 2 otherwise). A bot with its own modes needs them named, for example `--bots example --modes direct`. |
 | `--runs` | 10 | Runs per bot and mode. |
 | `--pause` | 10 | Seconds between runs. |
-| `--seed` | random | Shuffle seed, to repeat an order. It is printed at the start. |
 
-The runs of all bots and modes are shuffled together. A run that the batch has waited 240 seconds for is reported as `wait_timeout` and the batch carries on. Ctrl-C stops the batch and names a run that was already queued and is left to the worker.
+The runs of all bots and modes are shuffled together.
 
 Then open `/stats`: every batch run is a normal run, so it is counted there with the rest of the history.
 
@@ -220,10 +219,8 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions b
 | Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
 | Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
 | Browser profiles | `tests/test_profiles.py` (12 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; the run records the profile, the browser signals and the decoded `create` request. `tests/test_registry.py` (6 tests): the registry's ids, names and modes in order, every profile has a registered bot, `validate`'s rules | profile and registry rules |
-| Batch runner | `tests/test_batch.py` (10 tests): plan size and seeded shuffle, one line per run and a pause between runs only, Ctrl-C, a run that never finishes, the arguments, an unknown bot or unsupported mode refused, a bot with only the `direct` mode batched, and a batch against the real queue with a stand-in worker | batch output and exit codes |
 | Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
 | Stats page | `tests/test_stats_page.py` (8 tests): counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns including a run with none | counts, rate and columns |
-| Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Stats page list the newest bot first | page and stats order |
 | Puzzle capture | `tests/test_puzzle_capture.py` (3 tests): a puzzle is saved as two artifacts and an event, images without a content type are saved as `.bin`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
 | Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
 | Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |

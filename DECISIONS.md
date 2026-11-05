@@ -250,7 +250,7 @@ A page showing an active run reloads its status every 2 seconds and stops when t
 
 ### 5b. Pages: `/bots`, `/runs` and `/runs/{id}`
 
-The PDF does not require a JSON API or batch launching, so neither is included.
+The PDF does not require a JSON API, so none is included. Batch launching is a small script, `python -m botplatform.batch`, and not a page.
 
 Each bot declares its modes as plain strings, such as `["headless", "headful"]` or `["direct"]`. The worker publishes them in the `bots` table, and the UI draws one button per mode. Web rejects a mode the bot does not declare, and the worker marks a run `error` if its bot or mode is no longer available. Modes are free-form, so the platform cannot catch a misspelled one, and each bot's test checks its declared modes. The core gives meaning to one string only: `headful` gets the "watch live" link, because the platform provides the viewer.
 
@@ -497,6 +497,12 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 **Why:** the bonus report measured whether the first `create` answer was a block. Now that the solver bots finish the login, the measure that matters is verified success, and the report was built around the question that has been answered. The batch had grown extras (jitter, early stop) that repeating a measurement does not need, and it could not run the solver bots at all. All eleven bots are kept by the user's decision, so every recorded comparison can still be re-run, at the cost of a longer list on `/bots`.
 
 **Cost:** the page no longer tells why a run was blocked, only that it was; the reason is on each run's page. Old links to `/bonus` return 404. The evidence files record results made with the old report and flags.
+
+### Batch runner reduced to a script
+
+**What:** `python -m botplatform.batch` is now a short plain script. It still queues normal runs, waits for each, prints one line per run, shuffles the order and pauses between runs. It loses `--seed`, the wait timeout, Ctrl-C handling, the summary and the injected functions. It still refuses a bot that is not published or does not support a mode, because a wrong mode would fill the history with error runs.
+
+**Why:** its tests were longer than the tool and used fakes (a stand-in worker, injected clocks) that could drift from the real queue. `/stats` already gives the summary per bot and mode. The real queue is exercised by one batch step in `.github/scripts/smoke.sh`.
 
 ### Redaction removed: passwords are stored and shown
 

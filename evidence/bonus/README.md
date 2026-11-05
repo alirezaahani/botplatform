@@ -1,6 +1,6 @@
 # Bonus: technical record of the experiments
 
-> Note: `/bonus`, `/bonus.md` and the batch flags `--profiles`, `--jitter` and `--stop-after` mentioned below were later replaced by `/stats` and `--bots`. The results here were recorded with the old ones.
+> Note: `/bonus`, `/bonus.md` and the batch flags `--profiles`, `--jitter`, `--stop-after` and `--seed` mentioned below were later replaced by `/stats` and `--bots`. The results here were recorded with the old ones.
 
 Facts and numbers from the work on reducing CAPTCHA blocking, 2026-11-04. Branch `bonus/reduce-captcha-blocking`. Reasoning for the design choices is in `DECISIONS.md` (Bonus (a), (b), (c)); this file only records what was done and what was observed.
 
