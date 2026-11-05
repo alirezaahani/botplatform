@@ -202,19 +202,20 @@ Bot cases are in `tests/test_bot.py` and use the fake demo page. Platform cases 
 
 ## Adding a bot
 
-A bot is a class that implements the contract in `src/botplatform/contract.py`:
+A bot is an instance of a `Bot` subclass that implements the contract in `src/botplatform/contract.py`:
 
 ```python
-from typing import ClassVar
-
 from botplatform.contract import Bot, BotResult, RunContext, Status
 
 
 class HelloBot(Bot):
-    id = "hello"
-    name = "Hello bot"
-    description = "Adds one event and succeeds."
-    modes: ClassVar[list[str]] = ["direct"]
+    def __init__(self) -> None:
+        super().__init__(
+            id="hello",
+            name="Hello bot",
+            description="Adds one event and succeeds.",
+            modes=["direct"],
+        )
 
     def run(self, ctx: RunContext) -> BotResult:
         ctx.event("hello", {"mode": ctx.mode})
@@ -224,7 +225,7 @@ class HelloBot(Bot):
 Then register it in the explicit list in `src/botplatform/bots/__init__.py`. Append new bots at the **end** of `BOTS`: the list order is the order bots were added, and the UI shows the newest (last) first.
 
 ```python
-BOTS: list[type[Bot]] = [ExampleBot, ArcaptchaBot, ..., HelloBot]
+BOTS: list[Bot] = [ExampleBot(), BASELINE_BOT, ..., HelloBot()]
 ```
 
 A browser variant of the ARCaptcha bot needs no new class: it is one entry in `PROFILES` in `src/botplatform/profiles.py`, which registers a bot `arcaptcha-<name>`.

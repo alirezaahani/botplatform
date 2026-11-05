@@ -81,13 +81,14 @@ Each bot implements one Python method and owns its browser. An optional helper c
 
 ### 2b. Registration: an explicit list
 
-Bots are registered by adding them to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
+Bots are registered by adding an instance to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
 
 **Why:**
 
 - The whole mechanism is readable in one place, with no import side effects.
 - A broken bot fails at worker startup with a normal traceback instead of quietly disappearing.
 - The list is in the `bots` package, so adding a bot does not touch the platform core.
+- Bots are instances, not classes, so one class plus a spec (`BotSpec` for ARCaptcha) covers every variant: no `type()` factories or `ClassVar` tricks.
 
 **Rejected:**
 
@@ -310,7 +311,7 @@ A fake server returns any outcome on demand, and a separate command runs against
 
 **Why:** the required failures are repeatable without relying on ARCaptcha or the IP, while real selectors and network capture still get exercised. The live command catches drift between the fake page and the real site.
 
-The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(url=..., timeouts=StepTimeouts(...))`. The production worker still calls `ArcaptchaBot()` with the defaults.
+The fake is FastAPI and uvicorn, started inside pytest, so only the test image carries them. It runs two servers on different ports, so the `create` API is truly cross-origin and Chrome sends a real CORS preflight. Each test sets the outcome in Python: any `captcha_type`, a hang, a dropped connection, an HTTP error, or a toast that disagrees with the response. The tests give the bot short timeouts through `ArcaptchaBot(BASELINE_SPEC, url=..., timeouts=StepTimeouts(...))`. The production worker runs the registered `BASELINE_BOT`, which has the defaults.
 
 **Result:** step 3 ran 50 tests (bot tests against the fake, plus codec and mode tests) in 92.2s, all passed (`pytest` in the test image, 2026-11-04). The live drift test was not part of that run.
 
@@ -455,7 +456,7 @@ The assisted bot (`arcaptcha-assisted`) and the drag probe (`arcaptcha-drag-prob
 
 ### Solver core: two automatic solver bots
 
-**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `Scenario._run_solver`. Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
+**What:** `arcaptcha-solver-cv-linear` and `arcaptcha-solver-cv-eased` (built headful only with profile `all-signals`; headless was added afterwards, see the mode bullet below). Each finds the gap with the `cv` finder, drags the handle there with Selenium `ActionChains` and lets the login judge. Code: `botplatform/solver/` (`gap.py` finders, `movement.py` paths and the executor, `cv/` the vendored detection) and `bots/arcaptcha/solver.py`. Up to 3 answers per run; a verified login is `success`/`solved`, 3 rejected answers `blocked`/`solve_failed`, no gap found `blocked`/`gap_not_found`.
 
 **Facts from live data this rests on:** the background is 260x160 and the piece a separate 50x50 PNG; the handle's `left` equals the piece's `left` equals the answer, 1:1, clamped at 196 px; the right answer is the gap body square's left x minus 10; 3 of 3 drags landing exactly there were accepted (1 Selenium, 2 CDP), drags 10 px or more away were rejected, humans were accepted up to 4 px off; a wrong answer brings a new puzzle in about 0.5 s and 8 wrong answers in a row were not blocked.
 
