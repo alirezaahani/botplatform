@@ -88,7 +88,7 @@ Bots are registered by adding an instance to the `BOTS` list in `botplatform/bot
 - The whole mechanism is readable in one place, with no import side effects.
 - A broken bot fails at worker startup with a normal traceback instead of quietly disappearing.
 - The list is in the `bots` package, so adding a bot does not touch the platform core.
-- Bots are instances, not classes, so one class plus a spec (`BotSpec` for ARCaptcha) covers every variant: no `type()` factories or `ClassVar` tricks.
+- Bots are instances, not classes, so one class with constructor arguments (`ArcaptchaBot`) covers every variant: no `type()` factories or `ClassVar` tricks.
 
 **Rejected:**
 
@@ -555,6 +555,7 @@ Exact match with `halo_target`: 8 of 8; largest difference 0 px; within 4 px of 
 - The `cv` finder is now called `halo`, after what it looks for. The bot ids and the evidence use the new name.
 - The tests mirror the code: `tests/core/`, `tests/bots/utils/` (against a plain local page, with no ARCaptcha imports) and `tests/bots/arcaptcha/` (with the fake demo and fixtures). Three wiring checks were added: the migrations against the models (`alembic upgrade head` then `alembic check`, in a database of its own), `SeleniumBot` refusing modes Chrome cannot run and `profile_by_mode` keys that are not its modes, and the solver bots being generated from `FINDERS` x `MOVERS`, with a snapshot of the whole registry.
 - The migrations are squashed into one `0001_initial_schema.py`.
+- `BotSpec` is gone: `ArcaptchaBot` takes the variant as constructor arguments, which `SeleniumBot` mostly already had, plus its `challenge`. `Challenge` is an abstract base class like `Bot`, and `GiveUp` and `SliderSolver` subclass it, so the code shows what they are.
 
 **Why:** the helpers had no reason to sit beside one site, and a second Selenium bot should not need to copy them. A mistyped mode or profile key used to fall back silently (a typo in a mode would run headful), so it is refused at construction. The solver bots were a hand-written list that could drift from the finders and movers. Nothing is deployed, so there is no database to migrate and the history of schema changes is only noise.
 

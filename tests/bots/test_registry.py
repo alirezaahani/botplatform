@@ -53,4 +53,4 @@ def test_every_profile_has_a_bot_that_runs_with_it():
     for name, profile in PROFILES.items():
         bot = by_id["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
         assert isinstance(bot, ArcaptchaBot)
-        assert bot.spec.profile is profile
+        assert bot.profile is profile

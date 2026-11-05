@@ -7,6 +7,7 @@ from typing import Any
 from selenium.webdriver.common.by import By
 
 from botplatform.bots.arcaptcha import gap_finders
+from botplatform.bots.arcaptcha.challenge import Challenge
 from botplatform.bots.arcaptcha.checkbox import classify, types
 from botplatform.bots.arcaptcha.puzzle_capture import capture_puzzle
 from botplatform.bots.arcaptcha.responses import drain
@@ -57,7 +58,7 @@ class Attempt:
 
 
 @dataclass(frozen=True)
-class SliderSolver:
+class SliderSolver(Challenge):
     """Find the gap with a finder, drag the handle there with a mover, up to `solve_attempts` times.
 
     The answer's body never decides the outcome beyond this: an answer followed by no new puzzle

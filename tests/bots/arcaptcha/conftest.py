@@ -1,5 +1,6 @@
 """The ARCaptcha bots' setup: the fake demo site and one way to run a registered bot."""
 
+import copy
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -66,7 +67,10 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
     ) -> Outcome:
         registered = next(bot for bot in BOTS if bot.id == bot_id)
         assert isinstance(registered, ArcaptchaBot)
-        bot = ArcaptchaBot(registered.spec, url=url or fake.url, timeouts=timeouts, profile=profile)
+        bot = copy.copy(registered)
+        bot.url, bot.timeouts = url or fake.url, timeouts
+        if profile:  # a profile passed in wins for every mode
+            bot.profile, bot.profile_by_mode = profile, {}
         ctx = RecordingContext()
         started = time.monotonic()
         result = bot.run(ctx)
