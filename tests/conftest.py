@@ -1,10 +1,9 @@
-"""Shared setup: the fake demo site, a recording `RunContext`, and one way to run a bot."""
+"""Shared setup: a recording `RunContext`, the Chrome test marker, a display and the database."""
 
 import os
 import subprocess
 import time
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,24 +11,11 @@ import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import sessionmaker
 
-from botplatform.bots import BOTS
-from botplatform.bots.arcaptcha import ArcaptchaBot, StepTimeouts
-from botplatform.contract import Bot, BotResult, Status
+from botplatform.contract import Bot, BotResult
 from botplatform.db import Base, BotRecord, Run, SessionLocal, engine
-from botplatform.profiles import Profile
-from tests.fake_demo.server import FakeDemo
 
-USERNAME = "tester@example.com"
-PASSWORD = "s3cret-Pass-9431"
-# Short, so the suite stays quick. Chrome itself takes a few seconds to start.
-FAST = StepTimeouts(
-    load_page=3,
-    find_checkbox=2,
-    create_response=3,
-    more_create_responses=1,
-    login_response=3,
-    toast=1.5,
-)
+# Fixtures that start Chrome, or serve a page to it. A test using one is a Chrome test.
+CHROME_FIXTURES = {"fake", "driver", "local_page"}
 
 
 class RecordingContext:
@@ -64,61 +50,11 @@ class RecordingContext:
         return found[0]
 
 
-@dataclass
-class Outcome:
-    """A finished run: what the bot returned, what it recorded, and how long it took."""
-
-    result: BotResult
-    ctx: RecordingContext
-    seconds: float
-
-    @property
-    def verdict(self) -> tuple[Status, str | None]:
-        return self.result.status, self.result.reason
-
-
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Mark every test that drives Chrome, so `-m browser` and `-m 'not browser'` split the suite."""
     for item in items:
-        if "fake" in getattr(item, "fixturenames", ()):
+        if CHROME_FIXTURES & set(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.browser)
-
-
-@pytest.fixture
-def fake() -> Iterator[FakeDemo]:
-    demo = FakeDemo()
-    demo.start()
-    yield demo
-    demo.stop()
-
-
-@pytest.fixture
-def credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ARCAPTCHA_USERNAME", USERNAME)
-    monkeypatch.setenv("ARCAPTCHA_PASSWORD", PASSWORD)
-
-
-@pytest.fixture
-def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
-    """Run a registered ARCaptcha bot with real Chrome against the fake."""
-
-    def run(
-        bot_id: str = "arcaptcha",
-        *,
-        url: str | None = None,
-        timeouts: StepTimeouts = FAST,
-        profile: Profile | None = None,
-    ) -> Outcome:
-        registered = next(bot for bot in BOTS if bot.id == bot_id)
-        assert isinstance(registered, ArcaptchaBot)
-        bot = ArcaptchaBot(registered.spec, url=url or fake.url, timeouts=timeouts, profile=profile)
-        ctx = RecordingContext()
-        started = time.monotonic()
-        result = bot.run(ctx)
-        outcome = Outcome(result, ctx, time.monotonic() - started)
-        return outcome
-
-    return run
 
 
 @pytest.fixture

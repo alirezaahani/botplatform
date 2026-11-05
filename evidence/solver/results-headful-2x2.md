@@ -4,8 +4,8 @@ Four automatic solver bots ran on the live ARCaptcha demo: two gap finders times
 
 | Bot | Finder | Movement | Runs | `success` / `solved` | Solved on attempt 1 | Median run | Drag time |
 |---|---|---|---|---|---|---|---|
-| `arcaptcha-solver-cv-linear` | `cv` (halo detection, body square minus 10) | 8 equal steps | 10 | 10 | 10 | 15.9 s | 0.60 s |
-| `arcaptcha-solver-cv-eased` | `cv` | ease-out, 25-40 steps | 10 | 10 | 10 | 16.0 s | 1.19 s average |
+| `arcaptcha-solver-halo-linear` | `halo` (halo detection, body square minus 10) | 8 equal steps | 10 | 10 | 10 | 15.9 s | 0.60 s |
+| `arcaptcha-solver-halo-eased` | `halo` | ease-out, 25-40 steps | 10 | 10 | 10 | 16.0 s | 1.19 s average |
 | `arcaptcha-solver-silhouette-linear` | `silhouette` (ring minus inside, along x) | 8 equal steps | 10 | 10 | 10 | 15.8 s | 0.60 s |
 | `arcaptcha-solver-silhouette-eased` | `silhouette` | ease-out, 25-40 steps | 10 | 10 | 10 | 15.7 s | 1.22 s average |
 
@@ -14,9 +14,9 @@ Four automatic solver bots ran on the live ARCaptcha demo: two gap finders times
 ## How the runs were made
 
 - The four bots were interleaved: 10 rounds, in each round one run of each bot, with 15 seconds between runs. This spreads time-of-day effects evenly across the bots.
-- Run order within a round: `cv-linear`, `silhouette-eased`, `cv-eased`, `silhouette-linear`.
+- Run order within a round: `halo-linear`, `silhouette-eased`, `halo-eased`, `silhouette-linear`.
 - The runs were started through the platform's normal launch endpoint, one at a time.
-- Before this, a smoke batch of 6 runs (3 of each `cv` bot, alternating) also gave 6 of 6 `success` / `solved`, all on attempt 1. Those rows are in the JSON file under the batch name `first smoke batch`. They are not in the table above.
+- Before this, a smoke batch of 6 runs (3 of each `halo` bot, alternating) also gave 6 of 6 `success` / `solved`, all on attempt 1. Those rows are in the JSON file under the batch name `first smoke batch`. They are not in the table above.
 
 ## What the runs show
 

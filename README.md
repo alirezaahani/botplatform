@@ -80,11 +80,11 @@ If anyone opens the live view, the run page warns that the result may be human-a
 ssh -L 8000:127.0.0.1:8000 user@server
 ```
 
-To check that the worker image brings up the display and viewer, run `tests/check_viewer.sh`.
+To check that the worker image brings up the display and viewer, run `tests/core/check_viewer.sh`.
 
 ## Reducing CAPTCHA blocking (bonus)
 
-The approach: the site blocks the plain bot at the first `create` request, so the bot can take a different browser profile (`src/botplatform/profiles.py`): Chrome arguments, dropped Selenium switches and a start-up script that hides automation signals. Each profile is its own registered bot, `arcaptcha-<profile>`, so every run lands in the normal run history, and the history is the evidence. `all-signals` combines the three single-factor profiles and is meant for `headful`. `all-signals-headless` adds a normal user agent and screen size, and is meant for `headless`.
+The approach: the site blocks the plain bot at the first `create` request, so the bot can take a different browser profile (`src/botplatform/bots/utils/profiles.py`): Chrome arguments, dropped Selenium switches and a start-up script that hides automation signals. Each profile is its own registered bot, `arcaptcha-<profile>`, so every run lands in the normal run history, and the history is the evidence. `all-signals` combines the three single-factor profiles and is meant for `headful`. `all-signals-headless` adds a normal user agent and screen size, and is meant for `headless`.
 
 Live results, first `create` answer of each run (one IP, 2026-11-04, from [evidence/bonus/README.md](evidence/bonus/README.md)):
 
@@ -105,13 +105,13 @@ Limits, stated plainly:
 
 ```
 # a solver bot, both modes, 10 runs each
-docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-solver-cv-linear --runs 10 --pause 10
+docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-solver-halo-linear --runs 10 --pause 10
 
 # a profile bot, headful only
 docker compose run --rm -T web python -m botplatform.batch --bots arcaptcha-all-signals --modes headful --runs 10
 ```
 
-The worker must be running. The batch queues runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`), then a summary per bot and mode. It talks to the live demo site, so it is not part of the tests.
+The worker must be running. The batch queues the runs one at a time through the normal queue, waits for each, and prints one line per run (`number/total bot mode status reason challenge_id seconds`). The results are on `/stats`. It talks to the live demo site, so it is not part of the tests.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -119,9 +119,8 @@ The worker must be running. The batch queues runs one at a time through the norm
 | `--modes` | `headless,headful` | Comma separated modes. Every bot must support every mode given (exit code 2 otherwise). A bot with its own modes needs them named, for example `--bots example --modes direct`. |
 | `--runs` | 10 | Runs per bot and mode. |
 | `--pause` | 10 | Seconds between runs. |
-| `--seed` | random | Shuffle seed, to repeat an order. It is printed at the start. |
 
-The runs of all bots and modes are shuffled together. A run that the batch has waited 240 seconds for is reported as `wait_timeout` and the batch carries on. Ctrl-C stops the batch and names a run that was already queued and is left to the worker.
+The runs of all bots and modes are shuffled together.
 
 Then open `/stats`: every batch run is a normal run, so it is counted there with the rest of the history.
 
@@ -131,8 +130,8 @@ Four automatic bots, in `headful` or `headless` mode (headful uses the `all-sign
 
 | Bot | Finds the gap with | Moves the handle |
 |---|---|---|
-| `arcaptcha-solver-cv-linear` | `cv`: detects the light halo around the gap and measures its body square | 8 equal steps, about 0.6 s |
-| `arcaptcha-solver-cv-eased` | `cv` | ease-out over 25 to 40 steps, 0.8 to 1.5 s, 1 to 2 px vertical wobble |
+| `arcaptcha-solver-halo-linear` | `halo`: detects the light halo around the gap and measures its body square | 8 equal steps, about 0.6 s |
+| `arcaptcha-solver-halo-eased` | `halo` | ease-out over 25 to 40 steps, 0.8 to 1.5 s, 1 to 2 px vertical wobble |
 | `arcaptcha-solver-silhouette-linear` | `silhouette`: slides the piece's own outline along its row and scores the fit | 8 equal steps |
 | `arcaptcha-solver-silhouette-eased` | `silhouette` | ease-out, as above |
 
@@ -195,39 +194,39 @@ CI (`.github/workflows/ci.yml`) runs these checks and the tests, then starts the
 Real output of the test command:
 
 ```
-45 passed in 37.81s      (Chrome tests, 4 workers)
-163 passed, 46 deselected in 9.95s    (everything else)
+63 passed in 46.51s      (Chrome tests, 4 workers)
+160 passed, 64 deselected in 16.53s    (everything else)
 (the live test is never run by this command)
 ```
 
 ### What the tests cover
 
-Bot cases are in `tests/test_bot.py` and use the fake demo page; the decisions behind them (which `create` answers block, which login responses count) are in `tests/test_verdicts.py` and need no Chrome. Platform cases are in the other files. The bonus and stats work add rows at the end of the table. Each row lists the status and reason that the test asserts.
+The tests mirror the code. `tests/core/` covers the platform (queue, worker, viewer, stats, migrations). `tests/bots/utils/` covers the Selenium helpers against a plain local page and imports nothing from ARCaptcha. `tests/bots/arcaptcha/` covers the ARCaptcha bots against the fake demo page in `tests/bots/arcaptcha/fake_demo/`; the full-run cases are in `test_run.py`; the decisions behind them (which `create` answers block, which login responses count) are in `test_checkbox.py` and `test_login.py` and need no Chrome. `tests/bots/test_registry.py` holds the registry snapshot and its wiring. The bonus and stats work add rows at the end of the table. Each row lists the status and reason that the test asserts.
 
 | Case | Test | Result |
 |---|---|---|
 | Main success workflow | `test_an_accepted_checkbox_then_a_confirmed_login_succeeds` (types `accept` and `cookie`), `test_a_softban_is_judged_by_the_login_alone` | `success` |
-| Missing `challenge_id` | `test_what_the_create_answers_say_about_the_run` (`test_verdicts.py`), `test_a_create_body_nobody_can_decode_fails_without_crashing` | `failed`, `missing_challenge_id` |
+| Missing `challenge_id` | `test_what_the_create_answers_say_about_the_run` (`tests/bots/arcaptcha/test_checkbox.py`), `test_a_create_body_nobody_can_decode_fails_without_crashing` | `failed`, `missing_challenge_id` |
 | CAPTCHA blocking | `test_a_block_still_logs_in_and_a_good_login_never_upgrades_it` | `blocked`, `captcha_blocked` |
-| Puzzle or unsolved challenge | `test_a_puzzle_no_one_solves_ends_blocked_but_still_tries_the_login`, and the `puzzle`, `question` and `2fa` cases in `test_verdicts.py` | `blocked`, `challenge_unsolved` |
-| Step timeouts | `test_a_step_that_never_finishes_times_out_with_its_name` (page, checkbox, create, login) | `timeout`, reason is the step: `load_page`, `find_checkbox`, `create_response`, `login_response` |
-| Whole-run timeout | `test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit` in `tests/test_worker.py` | `timeout`, `run_time_limit` |
-| Unsuccessful form verification | `test_a_login_the_page_does_not_confirm_fails_verification`, and `test_a_login_counts_only_when_the_response_and_the_toast_agree` in `test_verdicts.py` | `failed`, `verification_failed` |
+| Puzzle or unsolved challenge | `test_a_puzzle_no_one_solves_ends_blocked_but_still_tries_the_login`, and the `puzzle`, `question` and `2fa` cases in `tests/bots/arcaptcha/test_checkbox.py` | `blocked`, `challenge_unsolved` |
+| Step timeouts | `test_a_step_that_never_finishes_times_out_with_its_name` in `tests/bots/arcaptcha/test_run.py` (page, checkbox, create, login) | `timeout`, reason is the step: `load_page`, `find_checkbox`, `create_response`, `login_response` |
+| Whole-run timeout | `test_a_hung_child_and_its_grandchild_are_killed_at_the_time_limit` in `tests/core/test_worker.py` | `timeout`, `run_time_limit` |
+| Unsuccessful form verification | `test_a_login_the_page_does_not_confirm_fails_verification`, and `test_a_login_counts_only_when_the_response_and_the_toast_agree` in `tests/bots/arcaptcha/test_login.py` | `failed`, `verification_failed` |
 | Dropped connections | `test_a_failed_create_request_is_an_error_straight_away`, `test_a_dropped_login_is_an_error_unless_the_run_already_failed` | `error`, `create_request_failed` or `login_request_failed` |
 | Dropped login after a block | `test_a_dropped_login_is_an_error_unless_the_run_already_failed` (after a block), `test_a_blocked_run_whose_login_hangs_stays_blocked` | `blocked`, `captcha_blocked` |
-| Queue claim | `test_claim_is_fifo`, `test_claim_marks_the_run_running_with_a_lease`, `test_concurrent_claims_never_duplicate_or_lose_a_run` in `tests/test_queue.py` | one claim per run |
-| Leases and reaping | `test_renew_extends_the_lease`, `test_reap_expired_marks_only_expired_running_runs`, `test_a_late_finish_after_reaping_changes_nothing` in `tests/test_queue.py`; `test_the_lease_is_renewed_while_the_child_runs`, `test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status` in `tests/test_worker.py` | `error`, `worker_lost` |
-| Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
-| Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/test_viewer.py` | proxy and link rules |
-| Browser profiles | `tests/test_profiles.py` (12 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; the run records the profile, the browser signals and the decoded `create` request. `tests/test_registry.py` (6 tests): the registry's ids, names and modes in order, every profile has a registered bot, `validate`'s rules | profile and registry rules |
-| Batch runner | `tests/test_batch.py` (10 tests): plan size and seeded shuffle, one line per run and a pause between runs only, Ctrl-C, a run that never finishes, the arguments, an unknown bot or unsupported mode refused, a bot with only the `direct` mode batched, and a batch against the real queue with a stand-in worker | batch output and exit codes |
-| Interval maths | `tests/test_stats.py` (6 tests): the 95% Wilson interval, including 0 of n, n of n and impossible counts | interval values |
-| Stats page | `tests/test_stats_page.py` (8 tests): counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns including a run with none | counts, rate and columns |
-| Newest first | `tests/test_order.py` (3 tests): `publish` sets and updates `position`, the Bots page and the Stats page list the newest bot first | page and stats order |
-| Puzzle capture | `tests/test_puzzle_capture.py` (3 tests): a puzzle is saved as two artifacts and an event, images without a content type are saved as `.bin`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
-| Gap finders | `tests/test_solver_gap.py` (19 tests): the `cv` finder returns the expected target on 8 real puzzles (stored in `tests/fixtures/solver/`) and raises `GapNotFound` on blank or garbage input; `tests/test_solver_silhouette.py` (18 tests): the same 8 puzzles for the silhouette finder, plus noise, garbage, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
-| Movement | `tests/test_solver_movement.py` (14 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px | path shape |
-| Solver bots | `tests/test_solver_bot.py` (11 tests): a cv/linear and a silhouette/eased bot solve a real fixture puzzle on the fake page, each solver bot picks its profile by mode, a wrong first target is rejected and then solved, all attempts rejected ends `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
+| Queue claim | `test_claim_is_fifo`, `test_claim_marks_the_run_running_with_a_lease`, `test_concurrent_claims_never_duplicate_or_lose_a_run` in `tests/core/test_queue.py` | one claim per run |
+| Leases and reaping | `test_renew_extends_the_lease`, `test_reap_expired_marks_only_expired_running_runs`, `test_a_late_finish_after_reaping_changes_nothing` in `tests/core/test_queue.py`; `test_the_lease_is_renewed_while_the_child_runs`, `test_losing_the_lease_kills_the_child_and_keeps_the_reapers_status` in `tests/core/test_worker.py` | `error`, `worker_lost` |
+| Worker crash and stop | `test_a_child_that_exits_without_a_result_is_bot_process_died`, `test_sigterm_kills_the_child_and_marks_the_run_worker_stopped` in `tests/core/test_worker.py` | `error`, `bot_process_died` or `worker_stopped` |
+| Viewer proxy | `test_live_redirects_to_novnc_through_the_proxy`, `test_websocket_carries_bytes_both_ways`, `test_websocket_closes_when_the_run_ends`, `test_proxy_refuses_runs_that_cannot_be_watched`, `test_watch_live_link_rules` in `tests/core/test_viewer.py` | proxy and link rules |
+| Browser profiles | `tests/bots/utils/test_profiles.py` (10 tests): each profile changes what the page sees (`navigator.webdriver`, `cdc_` names, WebGL, user agent, screen size) and not before page scripts; `tests/bots/arcaptcha/test_run.py` records the profile, the browser signals and the decoded `create` request | profile rules |
+| Registry | `tests/bots/test_registry.py` (3 tests): the registry's ids, names and modes in order, `validate` accepts it, every profile has a registered bot that runs with it; `tests/core/test_registry.py` (5 tests): `validate`'s rules, a bot removed from the published list is marked inactive and kept | registry rules |
+| Selenium helpers | `tests/bots/utils/test_browser.py` (13 tests): `do`, `wait_for` and `StepTimeout`, and `SeleniumBot` (refuses unknown modes and `profile_by_mode` keys, picks the profile by mode, records `browser_profile`, turns a timeout into `timeout` with a screenshot, screenshots and re-raises any other error); `test_network.py` (12 tests): `ResponseWatcher` and its records; `test_page_scripts.py` (6 tests): browser signals and in-page fetches | helper behaviour |
+| Drag | `tests/bots/utils/test_drag.py` (17 tests): both paths end exactly on the target, durations and wobble stay in bounds with a seeded generator, edge cases of 0 and 196 px, and a real drag on a local page | path shape |
+| Stats | `tests/core/test_stats.py` (14 tests): the 95% Wilson interval (0 of n, n of n, impossible counts), and the page: counts per bot and mode, the rate and interval text, 80 of 80 not shown as a certain 100%, watched runs left out but counted, queued and running runs not counted, runs of an inactive bot still shown, an empty history, and the `/runs` started, ended and duration columns | interval values, counts, rate and columns |
+| Migrations | `tests/core/test_migrations.py` (1 test): `alembic upgrade head` and `alembic check` in a database of its own, so the migration matches the models | no drift |
+| Puzzle capture | `tests/bots/arcaptcha/test_puzzle_capture.py` (3 tests): a puzzle is saved as two artifacts and an event, images without a content type are saved as `.bin`, broken images record a failure and leave the result unchanged | artifacts and `puzzle_captured` events |
+| Gap finders | `tests/bots/arcaptcha/test_gap_finders.py` (37 tests): both finders (`halo` and silhouette) return the expected target on 8 real puzzles (stored in `tests/bots/arcaptcha/fixtures/`) and raise `GapNotFound` on blank or garbage input; the silhouette finder is also tested with noise, a piece without alpha and a row outside the image | the answer in px, or `GapNotFound` |
+| Solver bots | `tests/bots/arcaptcha/test_slider_solver.py` (11 tests): solver bots solve a real fixture puzzle on the fake page, each solver bot is registered and picks its profile by mode, a wrong first target is rejected and then solved, all attempts rejected ends `blocked`, no gap ends `blocked` without a drag, a handle that ignores the first press is pressed again without counting as an attempt | `success`, `solved` and the failure cases |
 
 ## Adding a bot
 
@@ -257,11 +256,30 @@ Then register it in the explicit list in `src/botplatform/bots/__init__.py`. App
 BOTS: list[Bot] = [ExampleBot(), BASELINE_BOT, ..., HelloBot()]
 ```
 
-A browser variant of the ARCaptcha bot needs no new class: it is one entry in `PROFILES` in `src/botplatform/profiles.py`, which registers a bot `arcaptcha-<name>`.
+A browser variant of the ARCaptcha bot needs no new class: it is one entry in `PROFILES` in `src/botplatform/bots/utils/profiles.py`, which registers a bot `arcaptcha-<name>`.
+
+A bot that drives Chrome can subclass `SeleniumBot` and implement only `steps(browser)`:
+
+```python
+from botplatform.bots.utils.browser import BrowserSession, SeleniumBot, wait_for
+from botplatform.contract import BotResult, Status
+
+
+class TitleBot(SeleniumBot):
+    def __init__(self) -> None:
+        super().__init__(id="title", name="Title bot", modes=["headless", "headful"])
+
+    def steps(self, browser: BrowserSession) -> BotResult:
+        browser.driver.get("https://example.com")
+        wait_for(browser, lambda: browser.driver.title, seconds=10, step="load_page")
+        return BotResult(status=Status.SUCCESS)
+```
+
+`SeleniumBot` gives the bot a browser profile per mode (`profile` and `profile_by_mode`), the `browser_profile` event, a `timeout` result when a step raises `StepTimeout` (as `wait_for` does), and an `error` screenshot when anything else is raised. It refuses modes other than `headless` and `headful`, and `profile_by_mode` keys that are not among its modes.
 
 The worker checks the list at startup (unique `id`, non-empty `name` and `modes`) and publishes it, so the new bot appears on `/bots` after you restart the worker (`docker compose up -d --build worker`). `ctx` also offers `event()`, `record_challenge_id()` and `artifact()`. An uncaught exception is recorded as `error`.
 
-You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx) -> BotResult`, and the core never imports Selenium. Only `src/botplatform/bots/selenium_support.py` is Selenium-specific: the `chrome()` launcher, the alert helper and `ResponseWatcher`. It is an optional helper. A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`. Nothing in this repo has a Playwright bot, and Playwright is not a dependency. Its browser would also have to be installed in the worker image.
+You can use another automation engine, such as Playwright, in the same way. The contract only needs `run(ctx) -> BotResult`, and the core never imports Selenium. The optional Selenium helpers live in `src/botplatform/bots/utils/`: `browser.py` (the `chrome()` launcher, `SeleniumBot`, `wait_for`, the alert-aware `do`, `screenshot`), `profiles.py` (browser profiles), `network.py` (`ResponseWatcher`), `drag.py` (drag paths and `perform_drag`) and `page_scripts.py` (browser signals and in-page fetches). A bot with another engine would start its own browser, and send screenshots with `ctx.artifact(name, "image/png", data)` and timeline entries with `ctx.event()`. Nothing in this repo has a Playwright bot, and Playwright is not a dependency. Its browser would also have to be installed in the worker image.
 
 ## Data persistence
 

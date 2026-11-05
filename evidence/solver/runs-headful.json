@@ -2,7 +2,7 @@
  {
   "batch": "2x2 comparison",
   "run": "b01390b8-62e8-4d3f-a1d5-c7507e2a9a21",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 14.4,
@@ -28,7 +28,7 @@
  {
   "batch": "2x2 comparison",
   "run": "e7a3e839-0682-4e2e-82bd-4d2ee6a2a70f",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 15.5,
@@ -54,7 +54,7 @@
  {
   "batch": "2x2 comparison",
   "run": "f71d7a3c-758f-49dd-8dd4-663a867b4c14",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 14.3,
@@ -80,7 +80,7 @@
  {
   "batch": "2x2 comparison",
   "run": "0c9a0872-1331-42b3-9b49-f7024a29e14c",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 24.5,
@@ -106,7 +106,7 @@
  {
   "batch": "2x2 comparison",
   "run": "c0158184-aef5-4d49-98cf-ca80da53ca69",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 16.9,
@@ -132,7 +132,7 @@
  {
   "batch": "2x2 comparison",
   "run": "68fa6600-934d-49d1-bcb7-194e5109a430",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 16.6,
@@ -158,7 +158,7 @@
  {
   "batch": "2x2 comparison",
   "run": "23818142-2ad8-4055-b76b-8482dd852dad",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 19.8,
@@ -184,7 +184,7 @@
  {
   "batch": "2x2 comparison",
   "run": "0a850850-9d51-4972-a944-a2703d91c776",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 16.1,
@@ -210,7 +210,7 @@
  {
   "batch": "2x2 comparison",
   "run": "ce3f58e8-0f53-4848-8396-15608da8bf1c",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 16.7,
@@ -236,7 +236,7 @@
  {
   "batch": "2x2 comparison",
   "run": "9da6ce22-8fdc-4303-af1c-9873fc4d907b",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 24.7,
@@ -262,7 +262,7 @@
  {
   "batch": "2x2 comparison",
   "run": "9d426c23-4acf-465f-b031-d990fed14769",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 16.1,
@@ -288,7 +288,7 @@
  {
   "batch": "2x2 comparison",
   "run": "d02f3345-915a-4291-b881-5bf187a169c8",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 14.8,
@@ -314,7 +314,7 @@
  {
   "batch": "2x2 comparison",
   "run": "be2a7278-2d14-4f80-9360-a58a2e449573",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 14.9,
@@ -340,7 +340,7 @@
  {
   "batch": "2x2 comparison",
   "run": "ccc0a2a0-7cd4-41ce-b89c-d6f073aac8d3",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 15.0,
@@ -366,7 +366,7 @@
  {
   "batch": "2x2 comparison",
   "run": "ad782893-26cc-43aa-be1d-a51a806bf0a6",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 14.8,
@@ -392,7 +392,7 @@
  {
   "batch": "2x2 comparison",
   "run": "9f1ebe3b-d14b-4c07-a035-7cf62f841605",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 15.4,
@@ -418,7 +418,7 @@
  {
   "batch": "2x2 comparison",
   "run": "4f120a9b-e411-43c9-95e7-809cbcb0988b",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 15.8,
@@ -444,7 +444,7 @@
  {
   "batch": "2x2 comparison",
   "run": "a7aa5fd8-ad2d-4bf7-a8fe-caf0f497d334",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 16.0,
@@ -470,7 +470,7 @@
  {
   "batch": "2x2 comparison",
   "run": "efe3c226-a76b-4601-a790-03962ceaf739",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 15.9,
@@ -496,7 +496,7 @@
  {
   "batch": "2x2 comparison",
   "run": "da2c94eb-39cc-4bb5-beab-faaaf279731a",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 20.1,
@@ -522,7 +522,7 @@
  {
   "batch": "first smoke batch",
   "run": "f3cacf7d-65ad-45d8-8723-1476a70d6954",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 14.4,
@@ -535,7 +535,7 @@
  {
   "batch": "first smoke batch",
   "run": "124a124e-7f68-4753-82f8-3261dc0ed326",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 15.4,
@@ -548,7 +548,7 @@
  {
   "batch": "first smoke batch",
   "run": "820648d1-1f50-4504-88e2-78a8902432d5",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 15.7,
@@ -561,7 +561,7 @@
  {
   "batch": "first smoke batch",
   "run": "093f061f-19ec-4f92-a021-6ce09f5e9fc5",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 15.5,
@@ -574,7 +574,7 @@
  {
   "batch": "first smoke batch",
   "run": "16941884-05b3-48e5-9bab-c8fe4e2cbdf4",
-  "bot": "cv-linear",
+  "bot": "halo-linear",
   "status": "success",
   "reason": "solved",
   "seconds": 13.8,
@@ -587,7 +587,7 @@
  {
   "batch": "first smoke batch",
   "run": "063aa207-32ca-48f9-a74d-9f690cac58b4",
-  "bot": "cv-eased",
+  "bot": "halo-eased",
   "status": "success",
   "reason": "solved",
   "seconds": 14.5,

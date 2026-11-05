@@ -4,8 +4,8 @@ The same four solver bots as in [results-headful-2x2.md](results-headful-2x2.md)
 
 | Bot | Finder | Movement | Runs | `success` / `solved` | Solved on attempt 1 | Median run | Drag time (average) |
 |---|---|---|---|---|---|---|---|
-| `arcaptcha-solver-cv-linear` | `cv` | 8 equal steps | 10 | 10 | 10 | 15.2 s | 0.60 s |
-| `arcaptcha-solver-cv-eased` | `cv` | ease-out, 25-40 steps | 10 | 10 | 10 | 16.0 s | 1.09 s |
+| `arcaptcha-solver-halo-linear` | `halo` | 8 equal steps | 10 | 10 | 10 | 15.2 s | 0.60 s |
+| `arcaptcha-solver-halo-eased` | `halo` | ease-out, 25-40 steps | 10 | 10 | 10 | 16.0 s | 1.09 s |
 | `arcaptcha-solver-silhouette-linear` | `silhouette` | 8 equal steps | 10 | 10 | 10 | 14.7 s | 0.60 s |
 | `arcaptcha-solver-silhouette-eased` | `silhouette` | ease-out, 25-40 steps | 10 | 10 | 10 | 16.3 s | 1.17 s |
 
@@ -13,7 +13,7 @@ The same four solver bots as in [results-headful-2x2.md](results-headful-2x2.md)
 
 ## How the runs were made
 
-Exactly like the headful batch: 10 rounds, in each round one run of each bot in the order `cv-linear`, `silhouette-eased`, `cv-eased`, `silhouette-linear`, 15 seconds between runs, started through the platform's launch endpoint with `mode=headless`.
+Exactly like the headful batch: 10 rounds, in each round one run of each bot in the order `halo-linear`, `silhouette-eased`, `halo-eased`, `silhouette-linear`, 15 seconds between runs, started through the platform's launch endpoint with `mode=headless`.
 
 ## What the runs show
 

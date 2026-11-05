@@ -1,6 +1,6 @@
 # Bonus: technical record of the experiments
 
-> Note: `/bonus`, `/bonus.md` and the batch flags `--profiles`, `--jitter` and `--stop-after` mentioned below were later replaced by `/stats` and `--bots`. The results here were recorded with the old ones.
+> Note: `/bonus`, `/bonus.md` and the batch flags `--profiles`, `--jitter`, `--stop-after` and `--seed` mentioned below were later replaced by `/stats` and `--bots`. The results here were recorded with the old ones.
 
 Facts and numbers from the work on reducing CAPTCHA blocking, 2026-11-04. Branch `bonus/reduce-captcha-blocking`. Reasoning for the design choices is in `DECISIONS.md` (Bonus (a), (b), (c)); this file only records what was done and what was observed.
 
@@ -19,7 +19,7 @@ Facts and numbers from the work on reducing CAPTCHA blocking, 2026-11-04. Branch
 
 ## How the runs were made
 
-- Each configuration is a browser `Profile` (`src/botplatform/profiles.py`) and a registered bot `arcaptcha-<profile>`. `arcaptcha` is the baseline.
+- Each configuration is a browser `Profile` (`src/botplatform/bots/utils/profiles.py`) and a registered bot `arcaptcha-<profile>`. `arcaptcha` is the baseline.
 - Run events stored for every ARCaptcha run: `browser_profile`, `browser_signals`, `create_request` (decoded request and response), `create_response`, `answer_request` (when an answer is sent), `login_request` (runs after the redaction was removed; earlier runs have `login_response`), plus the original events. Nothing is redacted.
 - Batches: `docker compose run --rm -T web python -m botplatform.batch --profiles <names> --modes <modes> --runs <n> --pause 5 --jitter 3 [--stop-after 0] --seed <s>`. Runs are shuffled, queued one at a time through the normal queue, and each is awaited before the next. The report is `/bonus` and `/bonus.md` (`?bot=`, `?since=`).
 - A run took 12 to 23 seconds when blocked or at a puzzle (page load about 7 s, `create` answer about 2 s after the click, login about 1 s).
@@ -59,7 +59,7 @@ Other values from the same request: fonts `[]`, `fontPreferences` equal for `ser
 
 `stealth-flags` changes `is_webdriver` to false in both modes (page `navigator.webdriver` false too) and removes the "controlled by automated test software" infobar (window height 437 vs 380 headless, 656 vs 599 headful). It leaves all 7 `cdc_` names.
 
-## Measurements on the fake demo page (from `tests/test_profiles.py`)
+## Measurements on the fake demo page (from `tests/bots/utils/test_profiles.py`)
 
 | Setting | Headless baseline | Headless, `--user-agent` + `--window-size=1280,800` | Same + `--screen-info={1280x800}` | Headful |
 |---|---|---|---|---|

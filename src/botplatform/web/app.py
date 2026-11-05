@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -50,12 +50,12 @@ def list_bots(request: Request, session: DbSession) -> HTMLResponse:
 
 @app.post("/bots/{bot_id}/runs")
 def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) -> RedirectResponse:
-    bot = session.get(BotRecord, bot_id)
-    if bot is None or not bot.active:
-        raise HTTPException(404, f"No active bot '{bot_id}'")
-    if mode not in bot.modes:
-        raise HTTPException(400, f"'{bot_id}' does not support mode '{mode}'")
-    run = queue.enqueue(session, bot_id, mode)
+    try:
+        run = queue.enqueue(session, bot_id, mode)
+    except queue.NoSuchBot as refused:
+        raise HTTPException(404, str(refused)) from None
+    except queue.LaunchRefused as refused:
+        raise HTTPException(400, str(refused)) from None
     session.commit()  # before the redirect, so the browser never follows it to a missing run
     return RedirectResponse(f"/runs/{run.id}", status_code=303)
 
@@ -64,29 +64,21 @@ def launch_run(bot_id: str, mode: Annotated[str, Form()], session: DbSession) ->
 def list_runs(
     request: Request,
     session: DbSession,
-    status: str = "",  # the form's "All" option sends an empty string
+    status: Status | Literal[""] = "",  # "" is the form's "All" option; FastAPI refuses others
     page: Annotated[int, Query(ge=1)] = 1,
 ) -> HTMLResponse:
-    try:
-        selected_status = Status(status) if status else None
-    except ValueError:
-        raise HTTPException(400, f"Unknown status '{status}'") from None
-    query = select(Run)
-    count_query = select(func.count()).select_from(Run)
-    if selected_status is not None:
-        query = query.where(Run.status == selected_status)
-        count_query = count_query.where(Run.status == selected_status)
+    query = select(Run).where(Run.status == status) if status else select(Run)
+    total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     runs = session.scalars(
         query.order_by(Run.queued_at.desc()).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE)
     ).all()
-    total = session.scalar(count_query) or 0
     return templates.TemplateResponse(
         request,
         "runs.html",
         {
             "runs": runs,
             "statuses": list(Status),
-            "selected_status": selected_status,
+            "selected_status": status or None,
             "page": page,
             "has_next": page * PAGE_SIZE < total,
             "any_active": any(run.status in ACTIVE_STATUSES for run in runs),
@@ -119,7 +111,7 @@ def run_detail(run_id: uuid.UUID, request: Request, session: DbSession) -> HTMLR
             "events": events,
             "artifacts": artifacts,
             "active": active,
-            "can_watch": active and run.mode == "headful" and bool(run.worker_id),
+            "can_watch": live.why_not_watchable(run) is None,
             "viewer_seen": any(event.type == "viewer_connected" for event in events),
             "still_queued": still_queued,
         },
