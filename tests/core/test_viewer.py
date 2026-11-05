@@ -198,7 +198,11 @@ def test_watch_live_link_rules(client: TestClient, kwargs: dict, link: bool) -> 
 
 
 def test_run_history_filter_accepts_all_and_rejects_unknown(client: TestClient) -> None:
-    make_run()
-    assert client.get("/runs?status=").status_code == 200  # the form's "All" option
-    assert client.get("/runs?status=queued").status_code == 200
-    assert client.get("/runs?status=nonsense").status_code == 400
+    run_id = make_run(status="queued")
+    everything = client.get("/runs?status=")  # the form's "All" option
+    assert everything.status_code == 200 and str(run_id)[:8] in everything.text
+    queued = client.get("/runs?status=queued")
+    assert queued.status_code == 200 and str(run_id)[:8] in queued.text
+    assert 'value="queued" selected' in queued.text  # the form shows the filter in use
+    assert str(run_id)[:8] not in client.get("/runs?status=success").text
+    assert client.get("/runs?status=nonsense").status_code == 422
