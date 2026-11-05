@@ -114,6 +114,6 @@ def test_a_handle_that_never_responds_ends_the_run_without_an_answer(fake_puzzle
 
 @pytest.mark.parametrize("bot", SOLVER_BOTS, ids=[bot.id for bot in SOLVER_BOTS])
 def test_each_solver_bot_is_registered_and_picks_its_profile_by_mode(bot):
-    assert bot in BOTS
+    assert BOTS[bot.id] is bot
     assert bot.profile_for(BrowserMode.HEADFUL) is ALL_SIGNALS
     assert bot.profile_for(BrowserMode.HEADLESS) is ALL_SIGNALS_HEADLESS

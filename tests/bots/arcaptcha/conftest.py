@@ -66,7 +66,7 @@ def run_bot(fake: FakeDemo, credentials: None) -> Callable[..., Outcome]:
         timeouts: StepTimeouts = FAST,
         profile: Profile | None = None,
     ) -> Outcome:
-        registered = next(bot for bot in BOTS if bot.id == bot_id)
+        registered = BOTS[bot_id]
         assert isinstance(registered, ArcaptchaBot)
         bot = copy.copy(registered)
         bot.url, bot.timeouts = url or fake.url, timeouts

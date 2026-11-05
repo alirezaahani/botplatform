@@ -1,4 +1,4 @@
-"""Checks the registered bots and publishes them for the web container to read."""
+"""Publishes the registered bots for the web container to read."""
 
 from typing import Any
 
@@ -11,20 +11,12 @@ from botplatform.contract import Bot
 from botplatform.db import BotRecord
 
 
-def validate(bots: list[Bot[Any]]) -> None:
-    seen: set[str] = set()
-    for bot in bots:
-        if bot.id in seen:
-            raise ValueError(f"Duplicate bot id: {bot.id}")
-        seen.add(bot.id)
-
-
-def publish(session: Session, bots: list[Bot[Any]]) -> None:
+def publish(session: Session, bots: dict[str, Bot[Any]]) -> None:
     """Upsert every registered bot, and mark the rest inactive.
 
     Removed bots keep their last `position`, so they stay in place in the history.
     """
-    for position, bot in enumerate(bots):
+    for position, bot in enumerate(bots.values()):
         values = {
             "name": bot.name,
             "description": bot.description,
@@ -40,6 +32,4 @@ def publish(session: Session, bots: list[Bot[Any]]) -> None:
                 index_elements=[BotRecord.id], set_={**values, "updated_at": func.now()}
             )
         )
-    session.execute(
-        update(BotRecord).where(BotRecord.id.not_in([bot.id for bot in bots])).values(active=False)
-    )
+    session.execute(update(BotRecord).where(BotRecord.id.not_in(list(bots))).values(active=False))

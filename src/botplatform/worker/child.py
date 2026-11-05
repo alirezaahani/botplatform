@@ -41,7 +41,7 @@ def execute(run_id: uuid.UUID) -> BotResult:
         run = session.get_one(Run, run_id)
         bot_id, mode_name = run.bot_id, run.mode
 
-    bot = next((bot for bot in BOTS if bot.id == bot_id), None)
+    bot = BOTS.get(bot_id)
     if bot is None:
         return BotResult(Status.ERROR, "bot_unavailable", f"This worker has no bot '{bot_id}'")
     try:

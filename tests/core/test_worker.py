@@ -172,7 +172,7 @@ def test_an_exception_raised_by_a_bot_becomes_an_unhandled_exception_result(
         def run(self, ctx: Any, mode: Mode) -> BotResult:
             raise RuntimeError("it broke")
 
-    monkeypatch.setattr(child, "BOTS", [Exploding("arcaptcha", "x", modes=Mode)])
+    monkeypatch.setattr(child, "BOTS", {"arcaptcha": Exploding("arcaptcha", "x", modes=Mode)})
     result = child.execute(claimed_run(db))
 
     assert (result.status, result.reason) == (Status.ERROR, "unhandled_exception")

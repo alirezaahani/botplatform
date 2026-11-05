@@ -98,10 +98,9 @@ def main() -> None:
     settings = Settings.model_validate({})
     worker_id = socket.gethostname()
 
-    registry.validate(BOTS)
     with SessionLocal.begin() as session:
         registry.publish(session, BOTS)
-    log.info("Worker %s published bots: %s", worker_id, [bot.id for bot in BOTS])
+    log.info("Worker %s published bots: %s", worker_id, list(BOTS))
 
     while True:
         with SessionLocal.begin() as session:

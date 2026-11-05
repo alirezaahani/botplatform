@@ -256,10 +256,10 @@ class HelloBot(Bot[HelloMode]):
         return BotResult(status=Status.SUCCESS)  # or e.g. Status.FAILED, reason="my_reason"
 ```
 
-Then register it in the explicit list in `src/botplatform/bots/__init__.py`. Append new bots at the **end** of `BOTS`: the list order is the order bots were added, and the UI shows the newest (last) first.
+Then register it in the explicit dict in `src/botplatform/bots/__init__.py`. Append new bots at the **end** of `BOTS`: the insertion order is the order bots were added, and the UI shows the newest (last) first.
 
 ```python
-BOTS: list[Bot[Any]] = [ExampleBot(), BASELINE_BOT, ..., HelloBot()]
+BOTS: dict[str, Bot[Any]] = {bot.id: bot for bot in [ExampleBot(), BASELINE_BOT, ..., HelloBot()]}
 ```
 
 A browser variant of the ARCaptcha bot needs no new class: it is one entry in `PROFILES` in `src/botplatform/bots/utils/profiles.py`, which registers a bot `arcaptcha-<name>`.

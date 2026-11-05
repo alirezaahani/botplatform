@@ -81,7 +81,7 @@ Each bot implements one Python method and owns its browser. An optional helper c
 
 ### 2b. Registration: an explicit list
 
-Bots are registered by adding an instance to the `BOTS` list in `botplatform/bots/__init__.py`. The worker rejects duplicate IDs at startup.
+Bots are registered by adding an instance to the `BOTS` dict (keyed by id) in `botplatform/bots/__init__.py`.
 
 **Why:**
 

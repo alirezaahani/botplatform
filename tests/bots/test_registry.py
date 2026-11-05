@@ -3,13 +3,12 @@
 from botplatform.bots import BOTS
 from botplatform.bots.arcaptcha import ArcaptchaBot
 from botplatform.bots.utils.profiles import PROFILES
-from botplatform.worker.registry import validate
 
 ARC = ["headless", "headful"]
 
 
 def test_the_registry_snapshot():
-    assert [(bot.id, bot.name, bot.mode_names()) for bot in BOTS] == [
+    assert [(bot.id, bot.name, bot.mode_names()) for bot in BOTS.values()] == [
         ("example", "Example bot", ["direct"]),
         ("arcaptcha", "ARCaptcha demo (Selenium)", ARC),
         ("arcaptcha-stealth-flags", "ARCaptcha demo (Selenium, stealth-flags)", ARC),
@@ -44,13 +43,8 @@ def test_the_registry_snapshot():
     ]
 
 
-def test_validate_accepts_the_registry():
-    validate(BOTS)
-
-
 def test_every_profile_has_a_bot_that_runs_with_it():
-    by_id = {bot.id: bot for bot in BOTS}
     for name, profile in PROFILES.items():
-        bot = by_id["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
+        bot = BOTS["arcaptcha" if name == "baseline" else f"arcaptcha-{name}"]
         assert isinstance(bot, ArcaptchaBot)
         assert bot.profile is profile
