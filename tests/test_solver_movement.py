@@ -1,5 +1,6 @@
 """The pure path generators."""
 
+import itertools
 import random
 
 import pytest
@@ -25,7 +26,7 @@ def test_linear_is_eight_equal_steps_at_an_equal_pace(dx):
     path = linear_path(dx)
     assert len(path) == 8
     xs = [0] + [x for x, _, _ in path]
-    steps = [b - a for a, b in zip(xs, xs[1:], strict=False)]
+    steps = [b - a for a, b in itertools.pairwise(xs)]
     assert max(steps) - min(steps) <= 1  # rounding only
     assert len({pause for _, _, pause in path}) == 1
     assert all(y == 0 for _, y, _ in path)
