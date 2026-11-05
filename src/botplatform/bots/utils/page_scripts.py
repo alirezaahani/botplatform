@@ -74,7 +74,10 @@ const get = async (src) => {
   }
   return {b64: btoa(binary), content_type: response.headers.get('content-type')};
 };
-Promise.all(arguments[0].map(get)).then(done, (error) => done({error: String(error)}));
+Promise.all(arguments[0].map(get)).then(
+  (files) => done({files: files}),
+  (error) => done({error: String(error)})
+);
 """
 
 
@@ -94,10 +97,13 @@ class FetchedFile:
 
 def fetch_in_page(session: BrowserSession, urls: list[str]) -> list[FetchedFile]:
     """Download `urls` from inside the page, in order. Raises RuntimeError if the page fails."""
-    fetched = do(session, lambda: session.driver.execute_async_script(FETCH_FILES_JS, urls))
-    if fetched is None or isinstance(fetched, dict):
-        raise RuntimeError((fetched or {}).get("error", "no result"))
-    return [FetchedFile(base64.b64decode(f["b64"]), f["content_type"]) for f in fetched]
+    match do(session, lambda: session.driver.execute_async_script(FETCH_FILES_JS, urls)):
+        case {"files": list() as files}:
+            return [FetchedFile(base64.b64decode(f["b64"]), f["content_type"]) for f in files]
+        case {"error": error}:
+            raise RuntimeError(error)
+        case other:
+            raise RuntimeError(f"the page gave no result: {other!r}")
 
 
 def save_fetched(ctx: RunContext, stem: str, fetched: FetchedFile) -> str:
