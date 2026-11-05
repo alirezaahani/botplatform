@@ -50,7 +50,10 @@ class RunContext(Protocol):
 
 
 class Bot(ABC):
-    """Subclass this, construct it, and add the instance to `BOTS` in `botplatform/bots/__init__.py`."""
+    """Subclass this, construct it, and add the instance to `BOTS`.
+
+    `BOTS` is in `botplatform/bots/__init__.py`.
+    """
 
     def __init__(
         self, id: str, name: str, description: str = "", modes: Sequence[str] = ()
